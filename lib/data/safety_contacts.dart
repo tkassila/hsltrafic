@@ -1,0 +1,50 @@
+import '../models/safety_contact.dart';
+
+const List<SafetyContact> safetyContacts = [
+  SafetyContact(
+    id: 'c112',
+    title: 'Hätänumero 112',
+    subtitle: 'Hätätilanne',
+    phoneNumber: '112',
+    description: 'Hengenvaara, onnettomuus tai rikos.',
+    type: ContactType.emergency112,
+    operatingHours: '24/7',
+    isEmergency: true,
+  ),
+  SafetyContact(
+    id: 'metro',
+    title: 'Metron ja raitiovaunujen turvavalvomo',
+    subtitle: 'HSL Turvavalvomo',
+    phoneNumber: '093101200',
+    description: 'Häiriöt ja turvallisuusilmoitukset metrossa ja raitiovaunuissa.',
+    type: ContactType.metroTramSecurity,
+    operatingHours: '24/7',
+  ),
+  SafetyContact(
+    id: 'train',
+    title: 'Junien turvavalvomo',
+    subtitle: 'VR Turvapalvelut',
+    phoneNumber: '0800166888',
+    description: 'Turvallisuusilmoitukset lähijunissa ja asemilla.',
+    type: ContactType.trainSecurity,
+    operatingHours: '24/7',
+  ),
+  SafetyContact(
+    id: 'hsl',
+    title: 'HSL:n asiakaspalvelu',
+    subtitle: 'Matkustajainfo',
+    phoneNumber: '0947664000',
+    description: 'Reitit, liput ja yleiset kysymykset.',
+    type: ContactType.hslService,
+    operatingHours: 'Arkisin 7–19, viikonloppuisin 10–16',
+  ),
+  SafetyContact(
+    id: 'lost',
+    title: 'HSL:n löytötavarapalvelu',
+    subtitle: 'Kadonneet tavarat',
+    phoneNumber: '060041006',
+    description: 'Joukkoliikenteeseen unohtuneet tavarat.',
+    type: ContactType.lostProperty,
+    operatingHours: 'Arkisin 8–16',
+  ),
+];

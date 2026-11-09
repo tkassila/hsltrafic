@@ -1,0 +1,374 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../core/localization.dart';
+import '../../data/safety_contacts.dart';
+import '../../state/app_state.dart';
+import '../../theme/hsl_colors.dart';
+
+enum _MoreSection {
+  emergency,
+  alerts,
+  settings,
+}
+
+class MoreView extends StatefulWidget {
+  const MoreView({super.key});
+
+  @override
+  State<MoreView> createState() => _MoreViewState();
+}
+
+class _MoreViewState extends State<MoreView> {
+  _MoreSection? _openSection;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AlertsController>().refresh();
+    });
+  }
+
+  void _toggleSection(_MoreSection section) {
+    setState(() {
+      if (_openSection == section) {
+        _openSection = null;
+      } else {
+        _openSection = section;
+      }
+    });
+  }
+
+  Future<void> _makeCall(String number) async {
+    final uri = Uri.parse('tel:$number');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri);
+    }
+  }
+
+  Widget _buildSectionHeader({
+    required _MoreSection section,
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    String? badgeText,
+    Widget? trailingAction,
+  }) {
+    final isOpen = _openSection == section;
+    final theme = Theme.of(context);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      elevation: isOpen ? 2 : 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(
+          color: isOpen ? HslColors.primaryBlue : theme.dividerColor.withValues(alpha: 0.4),
+          width: isOpen ? 1.8 : 1.0,
+        ),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => _toggleSection(section),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: iconColor, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: isOpen ? HslColors.primaryBlue : null,
+                  ),
+                ),
+              ),
+              if (badgeText != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: iconColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    badgeText,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: iconColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+              ],
+              if (trailingAction != null) ...[
+                trailingAction,
+                const SizedBox(width: 4),
+              ],
+              Icon(
+                isOpen ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                color: isOpen ? HslColors.primaryBlue : theme.hintColor,
+                size: 24,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final alerts = context.watch<AlertsController>();
+    final settings = context.watch<SettingsController>();
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(AppStrings.get('tab_more')),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        children: [
+          // 1. Section: Safety & Emergency Contacts (112, HSL security)
+          _buildSectionHeader(
+            section: _MoreSection.emergency,
+            icon: Icons.health_and_safety_rounded,
+            iconColor: HslColors.safetyRed,
+            title: AppStrings.get('emergency_contacts'),
+            badgeText: '${safetyContacts.length}',
+          ),
+          if (_openSection == _MoreSection.emergency)
+            Padding(
+              padding: const EdgeInsets.only(left: 8, bottom: 8),
+              child: Column(
+                children: [
+                  for (final contact in safetyContacts)
+                    Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      elevation: contact.isEmergency ? 3 : 1,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                        side: contact.isEmergency
+                            ? const BorderSide(color: HslColors.safetyRed, width: 1.5)
+                            : BorderSide.none,
+                      ),
+                      child: ListTile(
+                        leading: Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: contact.type.color.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(contact.type.icon, color: contact.type.color, size: 20),
+                        ),
+                        title: Text(contact.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        subtitle: Text(
+                          '${contact.subtitle} • ${contact.phoneNumber}\n${contact.description}',
+                          style: TextStyle(fontSize: 12, color: theme.hintColor),
+                        ),
+                        isThreeLine: true,
+                        trailing: IconButton(
+                          icon: const Icon(Icons.phone_in_talk_rounded, color: HslColors.primaryBlue),
+                          onPressed: () => _makeCall(contact.phoneNumber),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
+          const SizedBox(height: 4),
+
+          // 2. Section: Disruptions & Alerts
+          _buildSectionHeader(
+            section: _MoreSection.alerts,
+            icon: Icons.warning_amber_rounded,
+            iconColor: HslColors.warningAmber,
+            title: AppStrings.get('disruptions_alerts'),
+            badgeText: '${alerts.alerts.length}',
+            trailingAction: alerts.loading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : IconButton(
+                    icon: const Icon(Icons.refresh_rounded, size: 20),
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Päivitä',
+                    onPressed: alerts.refresh,
+                  ),
+          ),
+          if (_openSection == _MoreSection.alerts)
+            Padding(
+              padding: const EdgeInsets.only(left: 8, bottom: 8),
+              child: Column(
+                children: [
+                  if (alerts.alerts.isEmpty && !alerts.loading)
+                    const Card(
+                      margin: EdgeInsets.only(bottom: 8),
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            Icon(Icons.check_circle_outline_rounded, color: HslColors.successGreen, size: 20),
+                            SizedBox(width: 10),
+                            Expanded(child: Text('Ei aktiivisia liikennehäiriöitä.')),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    for (final alert in alerts.alerts.take(5))
+                      Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                alert.isSevere ? Icons.error_rounded : Icons.warning_rounded,
+                                color: alert.isSevere ? HslColors.safetyRed : HslColors.warningAmber,
+                                size: 22,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      alert.header,
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                    ),
+                                    if (alert.description.isNotEmpty) ...[
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        alert.description,
+                                        style: TextStyle(fontSize: 12, color: theme.hintColor),
+                                        maxLines: 3,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                ],
+              ),
+            ),
+
+          const SizedBox(height: 4),
+
+          // 3. Section: Map & App Settings
+          _buildSectionHeader(
+            section: _MoreSection.settings,
+            icon: Icons.settings_rounded,
+            iconColor: HslColors.primaryBlue,
+            title: AppStrings.get('settings'),
+          ),
+          if (_openSection == _MoreSection.settings)
+            Padding(
+              padding: const EdgeInsets.only(left: 8, bottom: 8),
+              child: Card(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                child: Column(
+                  children: [
+                    // Map Tile Source
+                    ListTile(
+                      leading: const Icon(Icons.layers_rounded, color: HslColors.primaryBlue),
+                      title: Text(AppStrings.get('map_tile_source')),
+                      subtitle: Text(settings.tile.label),
+                      trailing: DropdownButton<TileSource>(
+                        value: settings.tile,
+                        underline: const SizedBox(),
+                        items: TileSource.values
+                            .map((t) => DropdownMenuItem(value: t, child: Text(t.label)))
+                            .toList(),
+                        onChanged: (v) {
+                          if (v != null) settings.setTile(v);
+                        },
+                      ),
+                    ),
+
+                    const Divider(height: 1),
+
+                    // Language
+                    ListTile(
+                      leading: const Icon(Icons.language_rounded, color: HslColors.primaryBlue),
+                      title: const Text('Kieli / Språk / Language'),
+                      subtitle: Text(
+                        AppStrings.currentLang == AppLang.fi
+                            ? 'Suomi'
+                            : (AppStrings.currentLang == AppLang.sv ? 'Svenska' : 'English'),
+                      ),
+                      trailing: DropdownButton<AppLang>(
+                        value: AppStrings.currentLang,
+                        underline: const SizedBox(),
+                        items: const [
+                          DropdownMenuItem(value: AppLang.fi, child: Text('Suomi')),
+                          DropdownMenuItem(value: AppLang.sv, child: Text('Svenska')),
+                          DropdownMenuItem(value: AppLang.en, child: Text('English')),
+                        ],
+                        onChanged: (lang) {
+                          if (lang != null) {
+                            setState(() => AppStrings.currentLang = lang);
+                          }
+                        },
+                      ),
+                    ),
+
+                    const Divider(height: 1),
+
+                    // Theme mode
+                    ListTile(
+                      leading: const Icon(Icons.palette_rounded, color: HslColors.primaryBlue),
+                      title: const Text('Teema'),
+                      subtitle: Text(
+                        settings.themeMode == ThemeMode.dark
+                            ? 'Tumma'
+                            : (settings.themeMode == ThemeMode.light ? 'Vaalea' : 'Järjestelmä'),
+                      ),
+                      trailing: DropdownButton<ThemeMode>(
+                        value: settings.themeMode,
+                        underline: const SizedBox(),
+                        items: const [
+                          DropdownMenuItem(value: ThemeMode.dark, child: Text('Tumma')),
+                          DropdownMenuItem(value: ThemeMode.light, child: Text('Vaalea')),
+                          DropdownMenuItem(value: ThemeMode.system, child: Text('Järjestelmä')),
+                        ],
+                        onChanged: (m) {
+                          if (m != null) settings.setTheme(m);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          const SizedBox(height: 30),
+        ],
+      ),
+    );
+  }
+}
