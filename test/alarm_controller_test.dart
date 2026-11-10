@@ -297,7 +297,9 @@ void main() {
       final badgeFinder = find.byType(LineBadge);
       expect(badgeFinder, findsOneWidget);
 
-      // Long press the starting route icon
+      // Ensure visible and long press the starting route icon
+      await tester.ensureVisible(badgeFinder);
+      await tester.pumpAndSettle();
       await tester.longPress(badgeFinder);
       await tester.pumpAndSettle();
 

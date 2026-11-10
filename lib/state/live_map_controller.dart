@@ -188,6 +188,14 @@ class LiveMapController extends ChangeNotifier {
       connected = c;
       notifyListeners();
     });
+    s.settings.addListener(_onSettingsChanged);
+  }
+
+  void _onSettingsChanged() {
+    if (s.settings.region.center != null && s.location.position == null) {
+      center = s.settings.region.center!;
+      notifyListeners();
+    }
   }
 
   /// Rikastaa ajoneuvon tiedot: a) linjan numero, b) tarkka määränpää (esim. "Ilmala" tai "Länsisatama")
@@ -563,7 +571,7 @@ class LiveMapController extends ChangeNotifier {
   }
 
   void setArea(LatLng c, double r, {bool force = false}) {
-    final safeCenter = isInGreaterHelsinki(c) ? c : const LatLng(60.1699, 24.9384);
+    final safeCenter = isInFinland(c) ? c : (s.settings.region.center ?? const LatLng(60.1699, 24.9384));
     final moved = distanceMeters(center, safeCenter);
     center = safeCenter;
     radius = r;
@@ -1043,6 +1051,7 @@ class LiveMapController extends ChangeNotifier {
 
   @override
   void dispose() {
+    s.settings.removeListener(_onSettingsChanged);
     cancelPendingTimers();
     _sub?.cancel();
     _connSub?.cancel();

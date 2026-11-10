@@ -242,3 +242,7 @@ String _cellString(int latIndex, int lonIndex, int decimals) {
 /// Rajaa pisteen sallittuun aluelaatikkoon (HSL- ja Uudenmaan kehysalue), jottei esim. emulaattorin Kalifornia-oletus mene kyselyihin.
 bool isInGreaterHelsinki(LatLng p) =>
     p.latitude > 59.5 && p.latitude < 61.2 && p.longitude > 23.5 && p.longitude < 26.5;
+
+/// Tarkistaa onko piste Suomen valtakunnan rajojen sisällä (estää emulaattorin Kalifornia/Mountain View -koordinaatit).
+bool isInFinland(LatLng p) =>
+    p.latitude >= 59.4 && p.latitude <= 70.2 && p.longitude >= 19.0 && p.longitude <= 31.6;

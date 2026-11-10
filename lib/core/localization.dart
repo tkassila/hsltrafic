@@ -41,6 +41,41 @@ class AppStrings {
     'favorites': {AppLang.fi: 'Suosikit', AppLang.sv: 'Favoriter', AppLang.en: 'Favorites'},
     'settings': {AppLang.fi: 'Asetukset', AppLang.sv: 'Inställningar', AppLang.en: 'Settings'},
     'map_tile_source': {AppLang.fi: 'Karttapohja', AppLang.sv: 'Kartbotten', AppLang.en: 'Map Base Layer'},
+    'help_and_info': {AppLang.fi: 'Ohje & Paikkakunnat', AppLang.sv: 'Hjälp & Regioner', AppLang.en: 'Help & Regions'},
+
+    // Regions & Waltti guide
+    'transit_region_title': {AppLang.fi: 'Liikennealue & Paikkakunta', AppLang.sv: 'Trafikregion & Stad', AppLang.en: 'Transit Region & City'},
+    'waltti_cities_title': {AppLang.fi: 'Mitä ovat Waltti-kaupungit?', AppLang.sv: 'Vad är Waltti-städer?', AppLang.en: 'What are Waltti cities?'},
+    'waltti_cities_desc': {
+      AppLang.fi: 'Waltti on Suomen kaupunkiseutujen yhteinen joukkoliikennejärjestelmä. Sovelluksen Waltti-reititin kattaa seuraavien kaupunkien ja alueiden paikallisliikenteen aikataulut, linjat ja pysäkit:',
+      AppLang.sv: 'Waltti är ett gemensamt kollektivtrafiksystem för Finlands stadsregioner. Waltti-routern täcker lokal kollektivtrafik i följande städer och regioner:',
+      AppLang.en: 'Waltti is the shared public transport system for Finnish city regions. The Waltti router covers timetables, lines, and stops for the following cities and regions:',
+    },
+    'waltti_cities_list': {
+      AppLang.fi: '• Tampere (Nysse)\n• Turku (Föli)\n• Oulu (Oulun joukkoliikenne)\n• Jyväskylä (Linkki)\n• Kuopio (Vilkku)\n• Lahti (LSL)\n• Hämeenlinna\n• Joensuu (JOJO)\n• Kotka\n• Kouvola (Koutsi)\n• Lappeenranta (Jouko)\n• Mikkeli\n• Pohjois-Pohjanmaa / Raahe\n• Rauma\n• Riihimäki\n• Rovaniemi (Linkkari)\n• Salo\n• Vaasa (Lifti)\n• Kajaani',
+      AppLang.sv: '• Tammerfors (Nysse)\n• Åbo (Föli)\n• Uleåborg (Oulu)\n• Jyväskylä (Linkki)\n• Kuopio (Vilkku)\n• Lahtis (LSL)\n• Tavastehus (Hämeenlinna)\n• Joensuu (JOJO)\n• Kotka\n• Kouvola (Koutsi)\n• Villmanstrand (Jouko)\n• S:t Michel (Mikkeli)\n• Norra Österbotten / Brahestad (Raahe)\n• Raumo (Rauma)\n• Riihimäki\n• Rovaniemi (Linkkari)\n• Salo\n• Vasa (Lifti)\n• Kajana (Kajaani)',
+      AppLang.en: '• Tampere (Nysse)\n• Turku (Föli)\n• Oulu\n• Jyväskylä (Linkki)\n• Kuopio (Vilkku)\n• Lahti (LSL)\n• Hämeenlinna\n• Joensuu (JOJO)\n• Kotka\n• Kouvola (Koutsi)\n• Lappeenranta (Jouko)\n• Mikkeli\n• Northern Ostrobothnia / Raahe\n• Rauma\n• Riihimäki\n• Rovaniemi (Linkkari)\n• Salo\n• Vaasa (Lifti)\n• Kajaani',
+    },
+    'region_guide_hsl': {
+      AppLang.fi: 'Pääkaupunkiseutu (HSL): Helsinki, Espoo, Vantaa, Kauniainen, Kirkkonummi, Kerava, Sipoo, Tuusula ja Siuntio (bussit, ratikat, metro, lähijunat, lautta).',
+      AppLang.sv: 'Huvudstadsregionen (HRT/HSL): Helsingfors, Esbo, Vanda, Grankulla, Kyrkslätt, Kervo, Sibbo, Tusby och Sjundeå (bussar, spårvagnar, metro, närtåg, färja).',
+      AppLang.en: 'Helsinki Region (HSL): Helsinki, Espoo, Vantaa, Kauniainen, Kirkkonummi, Kerava, Sipoo, Tuusula, and Siuntio (buses, trams, metro, commuter trains, ferry).',
+    },
+    'region_guide_finland': {
+      AppLang.fi: 'Koko Suomi (VR & Kaukoliikenne): Koko valtakunnan kattava Matka.fi-reititin, mukaan lukien VR:n kaukojunat, Matkahuollon kaukobussit, OnniBus ja seutuliikenteet.',
+      AppLang.sv: 'Hela Finland (VR & Fjärrtrafik): Rikstäckande Matka.fi-router, inklusive VR:s fjärrtåg, Matkahuoltos fjärrbussar, OnniBus och regionaltrafik.',
+      AppLang.en: 'All Finland (VR & Long-distance): Nationwide Matka.fi router, including VR intercity trains, Matkahuolto long-distance coaches, OnniBus, and regional lines.',
+    },
+    'region_guide_auto': {
+      AppLang.fi: 'Automaattinen (GPS): Sovellus tunnistaa paikkakuntasi ja valitsee oikean reitityspalvelimen puolestasi laitteen GPS-sijainnin perusteella.',
+      AppLang.sv: 'Automatisk (GPS): Appen känner igen din plats och väljer rätt router automatiskt baserat på enhetens GPS-position.',
+      AppLang.en: 'Automatic (GPS): The app detects your city and automatically selects the correct router based on your device GPS location.',
+    },
+    'region_guide_intercity': {
+      AppLang.fi: 'Reittiopas & Kaukoliikenne: Reittiopas reitittää automaattisesti kaupunkien väliset matkat (esim. Helsinki ➔ Tampere) valtakunnallisella VR:n kaukojunilla (InterCity, Pendolino) ja kaukobusseilla. Hakukortista voit myös suodattaa kulkumuotoja (Juna, Bussi, Ratikka, Metro, Lautta).',
+      AppLang.sv: 'Ruttplanerare & Fjärrtrafik: Ruttplaneraren dirigerar automatiskt resor mellan städer (t.ex. Helsingfors ➔ Tammerfors) med VR:s fjärrtåg (InterCity, Pendolino) och fjärrbussar. Du kan också filtrera färdmedel direkt i sökkortet (Tåg, Buss, Spårvagn, Metro, Färja).',
+      AppLang.en: 'Route Planner & Long-distance: The route planner automatically routes intercity trips (e.g. Helsinki ➔ Tampere) using nationwide VR trains (InterCity, Pendolino) and coaches. You can also filter modes directly in the search card (Train, Bus, Tram, Metro, Ferry).',
+    },
   };
 
   static String get(String key) {

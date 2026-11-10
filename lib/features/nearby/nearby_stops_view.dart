@@ -15,7 +15,9 @@ import '../../models/transit_mode.dart';
 import '../../models/trip_alarm.dart';
 import '../../shared/base_map.dart';
 import '../../shared/mode_style.dart';
+import '../../shared/occupancy_dialog.dart';
 import '../../shared/place_search.dart';
+import '../../shared/region_selector.dart';
 import '../../shared/street_view.dart';
 import '../../shared/widgets.dart';
 import '../../state/alarm_controller.dart';
@@ -653,7 +655,19 @@ class _NearbyStopsViewState extends State<NearbyStopsView> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(AppStrings.get('tab_nearby')),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                AppStrings.get('tab_nearby'),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            const TransitRegionSelectorPill(compact: true),
+          ],
+        ),
         actions: [
           IconButton(
             icon: Icon(
@@ -840,10 +854,10 @@ class _NearbyStopsViewState extends State<NearbyStopsView> {
                               ),
                             ),
                             child: Slider(
-                              value: nearby.radius.toDouble().clamp(50, 2000),
+                              value: nearby.radius.toDouble().clamp(50, 3000),
                               min: 50,
-                              max: 2000,
-                              divisions: 39,
+                              max: 3000,
+                              divisions: 59,
                               label: '${nearby.radius} m',
                               onChanged: (v) => nearby.setRadius(v.round()),
                               onChangeEnd: (v) =>
@@ -1968,7 +1982,13 @@ class _NearbyStopsViewState extends State<NearbyStopsView> {
                                                       }
                                                     },
                                                     onLongPress: () {
-                                                      _setAlarmForDeparture(stop, dep);
+                                                      showDepartureOccupancySheet(
+                                                        context,
+                                                        departure: dep,
+                                                        stop: stop,
+                                                        client: nearby.s.api,
+                                                        onSetAlarm: () => _setAlarmForDeparture(stop, dep),
+                                                      );
                                                     },
                                                     child: Padding(
                                                       padding:
@@ -2042,19 +2062,35 @@ class _NearbyStopsViewState extends State<NearbyStopsView> {
                                                                 CrossAxisAlignment
                                                                     .end,
                                                             children: [
-                                                              Text(
-                                                                '${dep.minutesUntil()} min',
-                                                                style: TextStyle(
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .bold,
-                                                                  fontSize: 14,
-                                                                  color:
-                                                                      dep.isRealtime
-                                                                      ? HslColors
-                                                                            .successGreen
-                                                                      : null,
-                                                                ),
+                                                              Row(
+                                                                mainAxisSize: MainAxisSize.min,
+                                                                children: [
+                                                                  if (dep.hasOccupancy) ...[
+                                                                    Tooltip(
+                                                                      message: dep.occupancyDescription,
+                                                                      child: Icon(
+                                                                        dep.occupancyIcon,
+                                                                        size: 13,
+                                                                        color: dep.occupancyColor,
+                                                                      ),
+                                                                    ),
+                                                                    const SizedBox(width: 3),
+                                                                  ],
+                                                                  Text(
+                                                                    '${dep.minutesUntil()} min',
+                                                                    style: TextStyle(
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .bold,
+                                                                      fontSize: 14,
+                                                                      color:
+                                                                          dep.isRealtime
+                                                                          ? HslColors
+                                                                                .successGreen
+                                                                          : null,
+                                                                    ),
+                                                                  ),
+                                                                ],
                                                               ),
                                                               Text(
                                                                 hm(
@@ -2219,11 +2255,17 @@ class _NearbyStopsViewState extends State<NearbyStopsView> {
                                                                                 : Colors.grey.shade700);
 
                                                                       return Tooltip(
-                                                                        message: 'Paina pitkään: aseta huomiohälytys (kävely - 7 min)',
+                                                                        message: 'Paina pitkään: näytä kuormitustieto & hälytys',
                                                                         child: InkWell(
                                                                           borderRadius: BorderRadius.circular(8),
                                                                           onLongPress: () {
-                                                                            _setAlarmForDeparture(stop, hd);
+                                                                            showDepartureOccupancySheet(
+                                                                              context,
+                                                                              departure: hd,
+                                                                              stop: stop,
+                                                                              client: nearby.s.api,
+                                                                              onSetAlarm: () => _setAlarmForDeparture(stop, hd),
+                                                                            );
                                                                           },
                                                                           child: Container(
                                                                             padding: const EdgeInsets.symmetric(

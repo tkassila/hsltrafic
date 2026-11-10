@@ -49,6 +49,30 @@ class LinesController extends ChangeNotifier {
 
   LinesController(this.s, this.loc) {
     center = loc.position ?? loc.positionOrDefault;
+    s.settings.addListener(_onSettingsChanged);
+  }
+
+  void _onSettingsChanged() {
+    if (!loc.hasRealGps && s.settings.region.center != null) {
+      center = s.settings.region.center;
+      query = '';
+      errorMessage = null;
+      matchingLines = [];
+      matchingStops = [];
+      selectedLine = null;
+      selectedPattern = null;
+      selectedStop = null;
+      selectedStopRoute = null;
+      isTimetableVisible = false;
+      departures = [];
+      notifyListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    s.settings.removeListener(_onSettingsChanged);
+    super.dispose();
   }
 
   void setSearchMode(LinesSearchMode mode) {
@@ -140,12 +164,23 @@ class LinesController extends ChangeNotifier {
       return;
     }
 
-    // Etsitään tarkin vastaavuus (esim. lyhyt nimi vastaa hakua)
+    // Etsitään tarkin vastaavuus (suositaan aktiivisen alueen feedId:tä, esim. Tampereella tampere:3)
+    final targetFeed = s.settings.region.feedId?.toLowerCase();
     LineInfo? best;
     for (final l in lines) {
-      if (l.shortName.toLowerCase() == q.toLowerCase()) {
+      final matchesName = l.shortName.toLowerCase() == q.toLowerCase();
+      final matchesFeed = targetFeed != null && l.gtfsId.toLowerCase().startsWith('$targetFeed:');
+      if (matchesName && matchesFeed) {
         best = l;
         break;
+      }
+    }
+    if (best == null) {
+      for (final l in lines) {
+        if (l.shortName.toLowerCase() == q.toLowerCase()) {
+          best = l;
+          break;
+        }
       }
     }
     best ??= lines.first;

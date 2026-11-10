@@ -6,6 +6,9 @@ enum LocationState { unknown, ready, denied, deniedForever, serviceOff }
 
 /// GPS-sijainti vain kun sovellus on auki.
 class LocationService {
+  LatLng? lastPosition;
+  LatLng? get position => lastPosition;
+
   Future<LocationState> ensurePermission() async {
     if (!await Geolocator.isLocationServiceEnabled()) return LocationState.serviceOff;
     var p = await Geolocator.checkPermission();
@@ -19,14 +22,18 @@ class LocationService {
     // Haetaan sijainti suoraan Geolocator.getCurrentPosition()-kutsulla (kuten bussit-flutterissa)
     try {
       final pos = await Geolocator.getCurrentPosition();
-      return LatLng(pos.latitude, pos.longitude);
+      final latLng = LatLng(pos.latitude, pos.longitude);
+      lastPosition = latLng;
+      return latLng;
     } catch (_) {}
 
     // Varalla laitteen viimeisin tunnettu sijainti
     try {
       final last = await Geolocator.getLastKnownPosition();
       if (last != null) {
-        return LatLng(last.latitude, last.longitude);
+        final latLng = LatLng(last.latitude, last.longitude);
+        lastPosition = latLng;
+        return latLng;
       }
     } catch (_) {}
     return null;

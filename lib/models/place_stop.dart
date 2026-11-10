@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'transit_mode.dart';
 
@@ -8,6 +9,7 @@ class GeoPlace {
   final LatLng position;
   final bool isCurrentLocation;
   final String? stopGtfsId;
+  final String? layer;
 
   const GeoPlace({
     required this.label,
@@ -15,6 +17,7 @@ class GeoPlace {
     this.secondary,
     this.isCurrentLocation = false,
     this.stopGtfsId,
+    this.layer,
   });
 
   Map<String, dynamic> toJson() => {
@@ -23,6 +26,7 @@ class GeoPlace {
         'lat': position.latitude,
         'lon': position.longitude,
         'stop': stopGtfsId,
+        if (layer != null) 'layer': layer,
       };
 
   factory GeoPlace.fromJson(Map<String, dynamic> j) => GeoPlace(
@@ -30,6 +34,7 @@ class GeoPlace {
         secondary: j['secondary'] as String?,
         position: LatLng((j['lat'] as num).toDouble(), (j['lon'] as num).toDouble()),
         stopGtfsId: j['stop'] as String?,
+        layer: j['layer'] as String?,
       );
 }
 
@@ -211,6 +216,8 @@ class Departure {
   final DateTime realtime;
   final bool isRealtime;
   final bool canceled;
+  final String? occupancyStatus; // GTFS-RT / Digitransit: EMPTY, MANY_SEATS_AVAILABLE, FEW_SEATS_AVAILABLE, STANDING_ROOM_ONLY, CRUSHED_STANDING_ROOM_ONLY, FULL, NOT_ACCEPTING_PASSENGERS
+  final int? occupancyPercentage; // 0..100 (jos saatavilla esim. HFP occu)
 
   const Departure({
     required this.line,
@@ -223,6 +230,8 @@ class Departure {
     this.routeGtfsId,
     this.tripGtfsId,
     this.directionId,
+    this.occupancyStatus,
+    this.occupancyPercentage,
   });
 
   int get delaySeconds => realtime.difference(scheduled).inSeconds;
@@ -233,6 +242,115 @@ class Departure {
     return d.isNegative ? 0 : (d.inSeconds / 60).round();
   }
 
+  /// Onko vuorolle saatavilla kuormitustietoa (occupancy)
+  bool get hasOccupancy => occupancyStatus != null || occupancyPercentage != null;
+
+  /// HSL:n mukainen sanallinen kuvaus kuormitusasteelle
+  String get occupancyDescription {
+    if (occupancyStatus != null) {
+      switch (occupancyStatus!.toUpperCase()) {
+        case 'MANY_SEATS_AVAILABLE':
+          return 'Paljon istumapaikkoja vapaana';
+        case 'FEW_SEATS_AVAILABLE':
+          return 'Vähän istumapaikkoja vapaana';
+        case 'STANDING_ROOM_ONLY':
+          return 'Vain seisomapaikkoja';
+        case 'CRUSHED_STANDING_ROOM_ONLY':
+          return 'Erittäin täynnä (ahdasta)';
+        case 'FULL':
+          return 'Täynnä';
+        case 'NOT_ACCEPTING_PASSENGERS':
+          return 'Ei ota matkustajia';
+        case 'EMPTY':
+          return 'Tyhjä (paljon tilaa)';
+        case 'NO_DATA_AVAILABLE':
+          return 'Ei kuormitustietoa saatavilla';
+      }
+    }
+    if (occupancyPercentage != null) {
+      if (occupancyPercentage! < 33) return 'Paljon tilaa ($occupancyPercentage %)';
+      if (occupancyPercentage! < 67) return 'Kohtalaisesti tilaa ($occupancyPercentage %)';
+      if (occupancyPercentage! < 90) return 'Vähän tilaa ($occupancyPercentage %)';
+      return 'Täynnä ($occupancyPercentage %)';
+    }
+    return 'Kuormitustietoa ei saatavilla';
+  }
+
+  /// Kuormitustason väri
+  Color get occupancyColor {
+    if (occupancyStatus != null) {
+      switch (occupancyStatus!.toUpperCase()) {
+        case 'MANY_SEATS_AVAILABLE':
+        case 'EMPTY':
+          return const Color(0xFF2E7D32); // vihreä
+        case 'FEW_SEATS_AVAILABLE':
+          return const Color(0xFFF57C00); // oranssi
+        case 'STANDING_ROOM_ONLY':
+          return const Color(0xFFE65100); // syvä oranssi
+        case 'CRUSHED_STANDING_ROOM_ONLY':
+        case 'FULL':
+        case 'NOT_ACCEPTING_PASSENGERS':
+          return const Color(0xFFD32F2F); // punainen
+      }
+    }
+    if (occupancyPercentage != null) {
+      if (occupancyPercentage! < 35) return const Color(0xFF2E7D32);
+      if (occupancyPercentage! < 70) return const Color(0xFFF57C00);
+      return const Color(0xFFD32F2F);
+    }
+    return Colors.grey;
+  }
+
+  /// Kuormitustason ikoni
+  IconData get occupancyIcon {
+    if (occupancyStatus != null) {
+      switch (occupancyStatus!.toUpperCase()) {
+        case 'MANY_SEATS_AVAILABLE':
+        case 'EMPTY':
+          return Icons.airline_seat_recline_normal_rounded;
+        case 'FEW_SEATS_AVAILABLE':
+          return Icons.person_rounded;
+        case 'STANDING_ROOM_ONLY':
+          return Icons.groups_rounded;
+        case 'CRUSHED_STANDING_ROOM_ONLY':
+        case 'FULL':
+          return Icons.warning_rounded;
+        case 'NOT_ACCEPTING_PASSENGERS':
+          return Icons.block_rounded;
+      }
+    }
+    return Icons.people_outline_rounded;
+  }
+
+  Departure copyWith({
+    String? line,
+    TransitMode? mode,
+    String? headsign,
+    DateTime? scheduled,
+    DateTime? realtime,
+    bool? isRealtime,
+    bool? canceled,
+    String? routeGtfsId,
+    String? tripGtfsId,
+    int? directionId,
+    String? occupancyStatus,
+    int? occupancyPercentage,
+  }) =>
+      Departure(
+        line: line ?? this.line,
+        mode: mode ?? this.mode,
+        headsign: headsign ?? this.headsign,
+        scheduled: scheduled ?? this.scheduled,
+        realtime: realtime ?? this.realtime,
+        isRealtime: isRealtime ?? this.isRealtime,
+        canceled: canceled ?? this.canceled,
+        routeGtfsId: routeGtfsId ?? this.routeGtfsId,
+        tripGtfsId: tripGtfsId ?? this.tripGtfsId,
+        directionId: directionId ?? this.directionId,
+        occupancyStatus: occupancyStatus ?? this.occupancyStatus,
+        occupancyPercentage: occupancyPercentage ?? this.occupancyPercentage,
+      );
+
   factory Departure.fromJson(Map<String, dynamic> j) {
     final serviceDay = (j['serviceDay'] as num).toInt();
     final sched = (j['scheduledDeparture'] as num).toInt();
@@ -240,6 +358,13 @@ class Departure {
     final trip = j['trip'] as Map<String, dynamic>?;
     final route = trip?['route'] as Map<String, dynamic>?;
     final dir = parseDirectionId(trip?['directionId']);
+    final occ = trip?['occupancy'] as Map<String, dynamic>?;
+    final occStatus = (occ?['occupancyStatus'] as String?) ??
+        (j['occupancyStatus'] as String?) ??
+        (trip?['occupancyStatus'] as String?);
+    final occPct = (trip?['occupancyPercentage'] as num?)?.toInt() ??
+        (j['occupancyPercentage'] as num?)?.toInt() ??
+        (j['occu'] as num?)?.toInt();
     return Departure(
       line: (route?['shortName'] as String?) ?? '?',
       routeGtfsId: route?['gtfsId'] as String?,
@@ -256,6 +381,8 @@ class Departure {
       realtime: DateTime.fromMillisecondsSinceEpoch((serviceDay + real) * 1000),
       isRealtime: (j['realtime'] as bool?) ?? false,
       canceled: j['realtimeState'] == 'CANCELED',
+      occupancyStatus: occStatus,
+      occupancyPercentage: occPct,
     );
   }
 }

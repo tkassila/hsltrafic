@@ -10,6 +10,8 @@ import '../../models/place_stop.dart';
 import '../../models/transit_mode.dart';
 import '../../shared/base_map.dart';
 import '../../shared/mode_style.dart';
+import '../../shared/occupancy_dialog.dart';
+import '../../shared/region_selector.dart';
 import '../../shared/street_view.dart';
 import '../../shared/widgets.dart';
 import '../../state/app_state.dart';
@@ -291,12 +293,15 @@ class _LinesViewState extends State<LinesView> {
                                   ),
                                 ),
                                 const Spacer(),
-                                if (lines.isLoading)
+                                const TransitRegionSelectorPill(compact: true),
+                                if (lines.isLoading) ...[
+                                  const SizedBox(width: 8),
                                   const SizedBox(
                                     width: 16,
                                     height: 16,
                                     child: CircularProgressIndicator(strokeWidth: 2, color: HslColors.primaryBlue),
                                   ),
+                                ],
                               ],
                             ),
                             const SizedBox(height: 6),
@@ -1107,6 +1112,7 @@ class _StopTimetableCard extends StatelessWidget {
   }
 
   Widget _buildTimetableList(BuildContext context, List<Departure> departures) {
+    final lines = context.read<LinesController>();
     return ListView.separated(
       padding: EdgeInsets.zero,
       itemCount: departures.length,
@@ -1117,57 +1123,83 @@ class _StopTimetableCard extends StatelessWidget {
         final schedStr = hm(d.scheduled);
         final delayMin = (d.delaySeconds / 60).round();
 
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
-          child: Row(
-            children: [
-              LineBadge(mode: d.mode, line: d.line, small: true),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  d.headsign,
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+        return Tooltip(
+          message: 'Paina pitkään: näytä kuormitustieto (täyttöaste)',
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () {
+              showDepartureOccupancySheet(
+                context,
+                departure: d,
+                stop: lines.selectedStop,
+                client: lines.s.api,
+              );
+            },
+            onLongPress: () {
+              showDepartureOccupancySheet(
+                context,
+                departure: d,
+                stop: lines.selectedStop,
+                client: lines.s.api,
+              );
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+              child: Row(
                 children: [
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
+                  LineBadge(mode: d.mode, line: d.line, small: true),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      d.headsign,
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      if (d.isRealtime) ...[
-                        const Icon(Icons.sensors, size: 12, color: HslColors.successGreen),
-                        const SizedBox(width: 3),
-                      ],
-                      Text(
-                        timeStr,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: d.isRealtime ? HslColors.primaryBlue : null,
-                        ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (d.hasOccupancy) ...[
+                            Icon(d.occupancyIcon, size: 12, color: d.occupancyColor),
+                            const SizedBox(width: 3),
+                          ],
+                          if (d.isRealtime) ...[
+                            const Icon(Icons.sensors, size: 12, color: HslColors.successGreen),
+                            const SizedBox(width: 3),
+                          ],
+                          Text(
+                            timeStr,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                              color: d.isRealtime ? HslColors.primaryBlue : null,
+                            ),
+                          ),
+                        ],
                       ),
+                      if (d.isRealtime && delayMin != 0)
+                        Text(
+                          delayMin > 0 ? '+$delayMin min' : '$delayMin min',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: delayMin > 2 ? HslColors.safetyRed : HslColors.warningAmber,
+                          ),
+                        )
+                      else if (schedStr != timeStr)
+                        Text(
+                          'Aikataulu $schedStr',
+                          style: const TextStyle(fontSize: 10, color: Colors.grey),
+                        ),
                     ],
                   ),
-                  if (d.isRealtime && delayMin != 0)
-                    Text(
-                      delayMin > 0 ? '+$delayMin min' : '$delayMin min',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: delayMin > 2 ? HslColors.safetyRed : HslColors.warningAmber,
-                      ),
-                    )
-                  else if (schedStr != timeStr)
-                    Text(
-                      'Aikataulu $schedStr',
-                      style: const TextStyle(fontSize: 10, color: Colors.grey),
-                    ),
                 ],
               ),
-            ],
+            ),
           ),
         );
       },

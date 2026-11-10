@@ -50,11 +50,28 @@ class ApiException implements Exception {
 /// Digitransit GraphQL- ja geokoodauspalvelun asiakas. Puhdas Dart: `http.Client` ja
 /// avain ovat injektoitavissa, jolloin sitä voi testata ilman verkkoa.
 class DigitransitClient {
-  static const _graphql = 'https://api.digitransit.fi/routing/v2/hsl/gtfs/v1';
+  static const _defaultGraphql = 'https://api.digitransit.fi/routing/v2/hsl/gtfs/v1';
   static const _geocode = 'https://api.digitransit.fi/geocoding/v1';
 
   final http.Client _http;
   final String Function() _key;
+  String Function()? _endpointProvider;
+  LatLng? Function()? _focusProvider;
+  String Function(LatLng from, LatLng to)? _planEndpointResolver;
+
+  String get graphqlUrl => _endpointProvider?.call() ?? _defaultGraphql;
+
+  void setEndpointProvider(String Function()? provider) {
+    _endpointProvider = provider;
+  }
+
+  void setFocusProvider(LatLng? Function()? provider) {
+    _focusProvider = provider;
+  }
+
+  void setPlanEndpointResolver(String Function(LatLng from, LatLng to)? resolver) {
+    _planEndpointResolver = resolver;
+  }
 
   /// Viimeisimmän `routesNear`-kyselyn yhteydessä 5 km pysäkeiltä poimitut
   /// reaaliaikaiset vuorot (`bussit-flutter`-tyylinen HTTPS GraphQL -paikannus).
@@ -131,9 +148,18 @@ class DigitransitClient {
     return null;
   }
 
-  DigitransitClient({http.Client? client, String Function()? keyProvider})
-      : _http = client ?? http.Client(),
-        _key = keyProvider ?? (() => AppConfig.digitransitApiKey);
+  DigitransitClient({
+    http.Client? client,
+    String Function()? keyProvider,
+    String Function()? endpointProvider,
+    LatLng? Function()? focusProvider,
+    String Function(LatLng from, LatLng to)? planEndpointResolver,
+  })  : _http = client ?? http.Client(),
+        _key = keyProvider ?? (() => AppConfig.digitransitApiKey) {
+    _endpointProvider = endpointProvider;
+    _focusProvider = focusProvider;
+    _planEndpointResolver = planEndpointResolver;
+  }
 
   Map<String, String> get _headers => {
         'Content-Type': 'application/json',
@@ -141,11 +167,15 @@ class DigitransitClient {
       };
 
   Future<Map<String, dynamic>> _query(String query) async {
+    return _queryWithUrl(graphqlUrl, query);
+  }
+
+  Future<Map<String, dynamic>> _queryWithUrl(String url, String query) async {
     if (_key().isEmpty) throw const ApiException('API-avain puuttuu (katso AppConfig).');
     final http.Response res;
     try {
       res = await _http
-          .post(Uri.parse(_graphql), headers: _headers, body: jsonEncode({'query': query}))
+          .post(Uri.parse(url), headers: _headers, body: jsonEncode({'query': query}))
           .timeout(const Duration(seconds: 20));
     } catch (e) {
       throw ApiException('Verkkovirhe: $e');
@@ -199,7 +229,7 @@ class DigitransitClient {
             gtfsId name code lat lon
             stoptimesWithoutPatterns(numberOfDepartures:3, timeRange:2700){
               headsign serviceDay scheduledDeparture realtimeDeparture departureDelay realtime
-              trip{gtfsId directionId tripHeadsign route{gtfsId shortName longName mode}}
+              trip{gtfsId directionId tripHeadsign occupancy{occupancyStatus} route{gtfsId shortName longName mode}}
             }
             routes{gtfsId shortName longName mode}
           }
@@ -228,7 +258,7 @@ class DigitransitClient {
         final trip = (st['trip'] as Map?)?.cast<String, dynamic>();
         final route = (trip?['route'] as Map?)?.cast<String, dynamic>();
         final id = route?['gtfsId'] as String?;
-        if (id == null || !id.startsWith('HSL:')) continue;
+        if (id == null || id.isEmpty) continue;
 
         routeMaps.putIfAbsent(id, () => route!);
         final dir = parseDirectionId(trip?['directionId']) ?? 0;
@@ -393,24 +423,31 @@ class DigitransitClient {
 
     final ids = <String>[];
     final seen = <String>{};
+    final effectiveFocus = _focusProvider?.call();
 
     for (final qText in queries) {
       try {
-        final uri = Uri.parse('$_geocode/search').replace(queryParameters: {
+        final qParams = <String, String>{
           'text': qText,
-          'layers': 'stop',
+          'layers': 'stop,station',
           'size': '15',
-        });
+          'boundary.country': 'FIN',
+          if (effectiveFocus != null) 'focus.point.lat': '${effectiveFocus.latitude}',
+          if (effectiveFocus != null) 'focus.point.lon': '${effectiveFocus.longitude}',
+        };
+        final uri = Uri.parse('$_geocode/search').replace(queryParameters: qParams);
         final res = await _http.get(uri, headers: _headers).timeout(const Duration(seconds: 10));
         if (res.statusCode != 200) continue;
         final body = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
         for (final f in (body['features'] as List? ?? const [])) {
           final idProp = (f['properties']?['id'] as String?) ?? '';
           String gtfsId = idProp.split('#').first;
-          if (gtfsId.startsWith('GTFS:')) {
+          if (gtfsId.toLowerCase().startsWith('gtfs:')) {
             gtfsId = gtfsId.substring(5);
+          } else if (gtfsId.toLowerCase().startsWith('gtfs')) {
+            gtfsId = gtfsId.substring(4);
           }
-          if (gtfsId.startsWith('HSL:') && seen.add(gtfsId)) {
+          if (gtfsId.isNotEmpty && seen.add(gtfsId)) {
             ids.add(gtfsId);
           }
         }
@@ -440,7 +477,7 @@ class DigitransitClient {
         final list = (data['stops'] as List?) ?? const [];
         return [
           for (final s in list)
-            if (s is Map && ((s['gtfsId'] as String?)?.startsWith('HSL:') ?? false))
+            if (s is Map && ((s['gtfsId'] as String?)?.isNotEmpty ?? false))
               Stop.fromJson(s.cast<String, dynamic>())
         ];
       }).catchError((_) => <Stop>[]);
@@ -468,7 +505,7 @@ class DigitransitClient {
           }''');
           final list = (data['stops'] as List?) ?? const [];
           for (final s in list) {
-            if (s is Map && ((s['gtfsId'] as String?)?.startsWith('HSL:') ?? false)) {
+            if (s is Map && ((s['gtfsId'] as String?)?.isNotEmpty ?? false)) {
               final stop = Stop.fromJson(s.cast<String, dynamic>());
               stopMap[stop.gtfsId] = stop;
             }
@@ -540,7 +577,7 @@ class DigitransitClient {
         stop(id: ${_s(stopId)}) {
           stoptimesWithoutPatterns(numberOfDepartures: $count, timeRange: 86400, startTime: $startTimeSec) {
             scheduledDeparture realtimeDeparture departureDelay realtime realtimeState serviceDay headsign
-            trip { gtfsId directionId tripHeadsign route { shortName longName mode gtfsId } }
+            trip { gtfsId directionId tripHeadsign occupancy{occupancyStatus} route { shortName longName mode gtfsId } }
           }
         }
       }''');
@@ -574,7 +611,7 @@ class DigitransitClient {
       b.write('''s$i: stop(id:${_s(ids[i])}){
         stoptimesWithoutPatterns(numberOfDepartures:$count, timeRange:7200){
           scheduledDeparture realtimeDeparture departureDelay realtime realtimeState serviceDay headsign
-          trip{gtfsId directionId tripHeadsign route{shortName longName mode gtfsId}}
+          trip{gtfsId directionId tripHeadsign occupancy{occupancyStatus} route{shortName longName mode gtfsId}}
         }}''');
     }
     b.write('}');
@@ -604,7 +641,7 @@ class DigitransitClient {
       stop(id: ${_s(stopId)}) {
         stoptimesWithoutPatterns(numberOfDepartures: 150, timeRange: $timeRangeSeconds) {
           scheduledDeparture realtimeDeparture departureDelay realtime realtimeState serviceDay headsign
-          trip { gtfsId directionId tripHeadsign route { shortName longName mode gtfsId } }
+          trip { gtfsId directionId tripHeadsign occupancy{occupancyStatus} route { shortName longName mode gtfsId } }
         }
       }
     }''');
@@ -621,13 +658,33 @@ class DigitransitClient {
         .toList();
   }
 
+  /// Hakee matkan (`tripGtfsId`) reaaliaikaisen kuormitustiedon (`occupancyStatus`).
+  Future<String?> tripOccupancy(String tripGtfsId) async {
+    if (tripGtfsId.isEmpty) return null;
+    try {
+      final data = await _query('''{
+        trip(id: ${_s(tripGtfsId)}) {
+          gtfsId
+          occupancy {
+            occupancyStatus
+          }
+        }
+      }''');
+      final trip = data['trip'] as Map<String, dynamic>?;
+      final occ = trip?['occupancy'] as Map<String, dynamic>?;
+      return occ?['occupancyStatus'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ------------------------------------------------------------------ Linjat
 
   Future<List<LineInfo>> searchLines(String name) async {
     final data = await _query('{routes(name:${_s(name)}){gtfsId shortName longName mode}}');
     return [
       for (final r in (data['routes'] as List))
-        if ((r['gtfsId'] as String).startsWith('HSL:'))
+        if ((r['gtfsId'] as String).isNotEmpty)
           LineInfo.fromJson((r as Map).cast<String, dynamic>()),
     ];
   }
@@ -726,7 +783,7 @@ class DigitransitClient {
   /// Toimii 100 % HTTPS-portissa 443 ilman riippuvuutta MQTT-soketista.
   Future<List<Vehicle>> vehiclesForRoutes(Iterable<String> routeGtfsIds) async {
     final ids = routeGtfsIds
-        .map((e) => e.startsWith('HSL:') ? e : 'HSL:$e')
+        .map((e) => e.contains(':') ? e : 'HSL:$e')
         .toSet()
         .take(20)
         .toList();
@@ -966,7 +1023,7 @@ class DigitransitClient {
         final tripId = (t['gtfsId'] as String?) ?? ids[i];
         final route = (t['route'] as Map?)?.cast<String, dynamic>();
         final routeGtfsId = (route?['gtfsId'] as String?) ?? '';
-        if (!routeGtfsId.startsWith('HSL:')) continue;
+        if (routeGtfsId.isEmpty) continue;
 
         final dir = parseDirectionId(t['directionId']) ?? 0;
         final polyPts = (t['tripGeometry'] as Map?)?['points'] as String?;
@@ -1256,24 +1313,77 @@ class DigitransitClient {
       args.write(
           ', modes:{transit:{transit:[${names.map((n) => '{mode:$n}').join(',')}]}}');
     }
-    final data = await _query('''{
-      planConnection($args){
-        edges{node{
-          start end walkDistance numberOfTransfers
-          legs{
-            mode realTime transitLeg headsign duration distance
-            start{scheduledTime estimated{time delay}}
-            end{scheduledTime estimated{time delay}}
-            from{name lat lon stop{gtfsId code}}
-            to{name lat lon stop{gtfsId code}}
-            route{shortName gtfsId}
-            intermediatePlaces{name lat lon}
-            legGeometry{points}
-            alerts{alertHeaderText}
-          }
-        }}
-      }}''');
-    final edges = (data['planConnection']['edges'] as List);
+    final targetUrl = _planEndpointResolver?.call(from, to) ?? graphqlUrl;
+    Map<String, dynamic> data;
+    try {
+      data = await _queryWithUrl(targetUrl, '''{
+        planConnection($args){
+          edges{node{
+            start end walkDistance numberOfTransfers
+            legs{
+              mode realTime transitLeg headsign duration distance
+              start{scheduledTime estimated{time delay}}
+              end{scheduledTime estimated{time delay}}
+              from{name lat lon stop{gtfsId code}}
+              to{name lat lon stop{gtfsId code}}
+              route{shortName gtfsId}
+              intermediatePlaces{name lat lon}
+              legGeometry{points}
+              alerts{alertHeaderText}
+            }
+          }}
+        }}''');
+    } catch (_) {
+      if (targetUrl != 'https://api.digitransit.fi/routing/v2/finland/gtfs/v1') {
+        data = await _queryWithUrl('https://api.digitransit.fi/routing/v2/finland/gtfs/v1', '''{
+          planConnection($args){
+            edges{node{
+              start end walkDistance numberOfTransfers
+              legs{
+                mode realTime transitLeg headsign duration distance
+                start{scheduledTime estimated{time delay}}
+                end{scheduledTime estimated{time delay}}
+                from{name lat lon stop{gtfsId code}}
+                to{name lat lon stop{gtfsId code}}
+                route{shortName gtfsId}
+                intermediatePlaces{name lat lon}
+                legGeometry{points}
+                alerts{alertHeaderText}
+              }
+            }}
+          }}''');
+      } else {
+        rethrow;
+      }
+    }
+
+    var edges = (data['planConnection']?['edges'] as List?) ?? const [];
+    if (edges.isEmpty && targetUrl != 'https://api.digitransit.fi/routing/v2/finland/gtfs/v1') {
+      try {
+        final fallbackData = await _queryWithUrl('https://api.digitransit.fi/routing/v2/finland/gtfs/v1', '''{
+          planConnection($args){
+            edges{node{
+              start end walkDistance numberOfTransfers
+              legs{
+                mode realTime transitLeg headsign duration distance
+                start{scheduledTime estimated{time delay}}
+                end{scheduledTime estimated{time delay}}
+                from{name lat lon stop{gtfsId code}}
+                to{name lat lon stop{gtfsId code}}
+                route{shortName gtfsId}
+                intermediatePlaces{name lat lon}
+                legGeometry{points}
+                alerts{alertHeaderText}
+              }
+            }}
+          }}''');
+        final fallbackEdges = (fallbackData['planConnection']?['edges'] as List?) ?? const [];
+        if (fallbackEdges.isNotEmpty) {
+          edges = fallbackEdges;
+        }
+      } catch (_) {}
+    }
+
     return [
       for (final e in edges) Itinerary.fromJson((e['node'] as Map).cast<String, dynamic>()),
     ];
@@ -1281,20 +1391,161 @@ class DigitransitClient {
 
   // ------------------------------------------------------------- Geokoodaus
 
-  Future<List<GeoPlace>> autocomplete(String text, {LatLng? focus, int size = 10}) async {
-    if (text.trim().length < 2) return const [];
-    final q = {
-      'text': text.trim(),
-      'size': '$size',
+  /// Älykäs geokoodaus- ja paikkahaku koko Suomelle.
+  ///
+  /// Yhdistää rinnakkain Pelias `/search`-haun (joka löytää kaupungit, kunnat,
+  /// rautatieasemat ja kaupunginosat korkealla luottamuksella) ja `/autocomplete`-haun
+  /// (joka täydentää reaaliaikaiset kirjoitusmuodot).
+  ///
+  /// Tulokset deduplikoidaan ja järjestetään älykkäästi:
+  /// 1. Kaupunki / kunta täsmähaku (esim. "Tampere", "Turku", "Oulu", "Helsinki") listan kärkeen
+  /// 2. Rautatieasemat ja matkakeskukset (erityisesti jos vain juna/VR on valittuna)
+  /// 3. Kaupungin/kunnan nimen alkuosa
+  /// 4. Kaupunginosat (esim. Hervanta, Pasila, Tikkurila, Kallio, Tapiola)
+  /// 5. Kadut ja osoitteet
+  /// 6. Yksittäiset bussipysäkit ja toissijaiset yritykset/kohteet
+  Future<List<GeoPlace>> autocomplete(
+    String text, {
+    LatLng? focus,
+    int size = 10,
+    bool isRailOnly = false,
+  }) async {
+    final trimmed = text.trim();
+    if (trimmed.length < 2) return const [];
+    final effectiveFocus = focus ?? _focusProvider?.call();
+    final q = <String, String>{
+      'text': trimmed,
+      'size': '${size * 2}',
       'lang': 'fi',
-      'boundary.rect.min_lat': '59.9',
-      'boundary.rect.max_lat': '60.6',
-      'boundary.rect.min_lon': '24.2',
-      'boundary.rect.max_lon': '25.6',
-      if (focus != null) 'focus.point.lat': '${focus.latitude}',
-      if (focus != null) 'focus.point.lon': '${focus.longitude}',
+      'boundary.country': 'FIN',
+      if (effectiveFocus != null) 'focus.point.lat': '${effectiveFocus.latitude}',
+      if (effectiveFocus != null) 'focus.point.lon': '${effectiveFocus.longitude}',
     };
-    return _geo('$_geocode/autocomplete', q);
+
+    final searchUri = Uri.parse('$_geocode/search').replace(queryParameters: q);
+    final autoUri = Uri.parse('$_geocode/autocomplete').replace(queryParameters: q);
+
+    final responses = await Future.wait([
+      _getRawFeatures(searchUri),
+      _getRawFeatures(autoUri),
+    ]);
+
+    final rawFeatures = <Map<String, dynamic>>[];
+    for (final list in responses) {
+      rawFeatures.addAll(list);
+    }
+
+    final seen = <String>{};
+    final uniqueFeatures = <Map<String, dynamic>>[];
+    for (final f in rawFeatures) {
+      final p = (f['properties'] as Map).cast<String, dynamic>();
+      final name = (p['name'] as String? ?? '').trim();
+      final label = (p['label'] as String? ?? '').trim();
+      final layer = (p['layer'] as String? ?? '').trim();
+      final coords = (f['geometry']?['coordinates'] as List?) ?? const [0.0, 0.0];
+      final lat = (coords[1] as num).toDouble();
+      final lon = (coords[0] as num).toDouble();
+
+      final cityKey = (name.toLowerCase() == label.toLowerCase() &&
+              (layer == 'localadmin' || layer == 'locality' || layer == 'venue'))
+          ? 'city-${name.toLowerCase()}'
+          : '$name-$label-$layer-${lat.toStringAsFixed(3)}-${lon.toStringAsFixed(3)}';
+
+      if (seen.add(cityKey)) {
+        uniqueFeatures.add(f);
+      }
+    }
+
+    int rank(Map<String, dynamic> f) {
+      final p = (f['properties'] as Map).cast<String, dynamic>();
+      final name = ((p['name'] as String?) ?? '').trim().toLowerCase();
+      final label = ((p['label'] as String?) ?? '').trim().toLowerCase();
+      final layer = ((p['layer'] as String?) ?? '').toLowerCase();
+      final queryLower = trimmed.toLowerCase();
+
+      final isExactName = name == queryLower;
+      final isPrefixName = name.startsWith(queryLower);
+      final isExactLabel = label == queryLower;
+      final isPrefixLabel = label.startsWith(queryLower);
+
+      // 1. Kaupunki tai kunta täsmähaku -> AINA listan ensimmäisenä!
+      if (isExactName && (layer == 'locality' || layer == 'localadmin')) return 0;
+      if (isExactName && layer == 'venue' && (isExactLabel || !label.contains(','))) return 0;
+
+      // 2. Rautatieasemat ja matkakeskukset
+      if (layer == 'station') {
+        if (isRailOnly) {
+          if (isExactName || isExactLabel) return 0;
+          return 1;
+        }
+        if (isExactName) return 1;
+        if (isPrefixName) return 2;
+        return 3;
+      }
+
+      // 3. Kaupungin tai kunnan nimen alku (esim. "Tamper" -> Tampere)
+      if ((layer == 'locality' || layer == 'localadmin') && (isPrefixName || isPrefixLabel)) return 4;
+
+      // 4. Kaupunginosat (esim. Hervanta, Pasila, Tikkurila, Kallio, Tapiola)
+      if (layer == 'neighbourhood' || layer == 'borough' || layer == 'macrohood') {
+        if (isExactName) return 5;
+        if (isPrefixName) return 6;
+        return 7;
+      }
+      if (isExactName && layer == 'venue' && label.contains(',')) return 5;
+
+      // 5. Kadut ja osoitteet
+      if (layer == 'address' || layer == 'street') {
+        if (isPrefixName) return 8;
+        return 10;
+      }
+
+      // 6. Yksittäiset pysäkit ja liikepaikat
+      if (layer == 'stop') {
+        if (isExactName) return 11;
+        if (isPrefixName) return 12;
+        return 15;
+      }
+
+      if (isExactName) return 13;
+      if (isPrefixName) return 14;
+      return 20;
+    }
+
+    uniqueFeatures.sort((a, b) => rank(a).compareTo(rank(b)));
+
+    final out = <GeoPlace>[];
+    for (final f in uniqueFeatures.take(size)) {
+      final props = (f['properties'] as Map).cast<String, dynamic>();
+      final coords = (f['geometry']?['coordinates'] as List?) ?? const [0.0, 0.0];
+      final id = props['id'] as String?;
+      final layer = props['layer'] as String?;
+      out.add(GeoPlace(
+        label: (props['name'] as String?) ?? (props['label'] as String? ?? ''),
+        secondary: _secondary(props),
+        position: LatLng((coords[1] as num).toDouble(), (coords[0] as num).toDouble()),
+        stopGtfsId: (layer == 'stop' || layer == 'station') && id != null
+            ? id.replaceFirst(RegExp(r'^gtfs:?', caseSensitive: false), '')
+            : null,
+        layer: layer,
+      ));
+    }
+    return out;
+  }
+
+  Future<List<Map<String, dynamic>>> _getRawFeatures(Uri uri) async {
+    if (_key().isEmpty) return const [];
+    try {
+      final res = await _http
+          .get(uri, headers: _headers)
+          .timeout(const Duration(seconds: 12));
+      if (res.statusCode != 200) return const [];
+      final body = jsonDecode(utf8.decode(res.bodyBytes)) as Map<String, dynamic>;
+      final list = body['features'] as List? ?? const [];
+      return list.cast<Map<String, dynamic>>();
+    } catch (_) {
+      return const [];
+    }
   }
 
   Future<GeoPlace?> reverse(LatLng p) async {
@@ -1324,25 +1575,52 @@ class DigitransitClient {
       final props = (f['properties'] as Map).cast<String, dynamic>();
       final coords = f['geometry']['coordinates'] as List;
       final id = props['id'] as String?; // esim. "gtfsHSL:1234"
+      final layer = props['layer'] as String?;
       out.add(GeoPlace(
         label: (props['name'] as String?) ?? (props['label'] as String? ?? ''),
         secondary: _secondary(props),
         position: LatLng((coords[1] as num).toDouble(), (coords[0] as num).toDouble()),
-        stopGtfsId: (props['layer'] == 'stop' || props['layer'] == 'station') && id != null
-            ? id.replaceFirst('gtfs', '')
+        stopGtfsId: (layer == 'stop' || layer == 'station') && id != null
+            ? id.replaceFirst(RegExp(r'^gtfs:?', caseSensitive: false), '')
             : null,
+        layer: layer,
       ));
     }
     return out;
   }
 
   static String? _secondary(Map<String, dynamic> p) {
-    final parts = <String>[
-      if (p['localadmin'] != null) p['localadmin'] as String else if (p['locality'] != null) p['locality'] as String,
-    ];
-    final label = p['label'] as String?;
-    if (label != null && p['name'] != null && label != p['name']) {
+    final layer = (p['layer'] as String? ?? '').toLowerCase();
+    final name = (p['name'] as String? ?? '').trim();
+    final label = (p['label'] as String? ?? '').trim();
+    final admin = (p['localadmin'] as String?) ?? (p['locality'] as String?);
+
+    if (layer == 'locality' || layer == 'localadmin') {
+      return 'Kaupunki / Kunta';
+    }
+    if (layer == 'station') {
+      final fullText = '$name $label'.toLowerCase();
+      if (fullText.contains('linja-auto') || fullText.contains('bussi')) {
+        return admin != null ? 'Linja-autoasema, $admin' : 'Linja-autoasema';
+      }
+      if (fullText.contains('metro') || fullText.contains('(m)')) {
+        return admin != null ? 'Metroasema, $admin' : 'Metroasema';
+      }
+      return admin != null ? 'Rautatieasema, $admin' : 'Rautatieasema';
+    }
+    if (layer == 'neighbourhood' || layer == 'borough' || layer == 'macrohood') {
+      return admin != null ? 'Kaupunginosa, $admin' : 'Kaupunginosa';
+    }
+    if (layer == 'venue' && label.contains(',')) {
       return label;
+    }
+
+    final parts = <String>[
+      ?admin,
+    ];
+    final rawLabel = p['label'] as String?;
+    if (rawLabel != null && p['name'] != null && rawLabel != p['name']) {
+      return rawLabel;
     }
     return parts.isEmpty ? null : parts.join(', ');
   }

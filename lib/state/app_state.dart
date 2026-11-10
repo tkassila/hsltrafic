@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../core/geo.dart';
 import '../data/digitransit_client.dart';
 import '../data/favorites_repository.dart';
 import '../data/hfp_service.dart';
 import '../data/location_service.dart';
 import '../models/line.dart';
 import '../models/place_stop.dart';
+import '../models/transit_region.dart';
 
 /// Yhteiset palvelut, jotka injektoidaan kaikille kontrollereille.
 class Services {
@@ -15,19 +15,23 @@ class Services {
   final HfpService hfp;
   final LocationService location;
   final FavoritesRepository repo;
+  SettingsController? _settings;
+  SettingsController get settings => _settings ??= SettingsController(this);
+  set settings(SettingsController s) => _settings = s;
+
   Services({required this.api, required this.hfp, required this.location, required this.repo});
 }
 
 enum TileSource {
-  digitransit('Digitransit (HSL)', 'digitransit'),
   osm('OpenStreetMap', 'osm'),
+  digitransit('Digitransit (HSL)', 'digitransit'),
   carto('CARTO tumma', 'carto');
 
   final String label;
   final String id;
   const TileSource(this.label, this.id);
   static TileSource byId(String id) =>
-      TileSource.values.firstWhere((t) => t.id == id, orElse: () => TileSource.digitransit);
+      TileSource.values.firstWhere((t) => t.id == id, orElse: () => TileSource.osm);
 }
 
 class SettingsController extends ChangeNotifier {
@@ -35,8 +39,34 @@ class SettingsController extends ChangeNotifier {
   late TileSource tile = TileSource.byId(s.repo.tileSource);
   ThemeMode themeMode = ThemeMode.dark;
   late int nearbyRadius = s.repo.nearbyRadius;
+  late TransitRegion region = TransitRegion.byId(s.repo.transitRegion);
 
-  SettingsController(this.s);
+  SettingsController(this.s) {
+    s.settings = this;
+    s.api.setEndpointProvider(() => activeGraphqlUrl);
+    s.api.setFocusProvider(() => activeFocusPoint);
+    s.api.setPlanEndpointResolver((from, to) => region.resolvePlanGraphqlUrl(from: from, to: to));
+  }
+
+  /// Aktiivinen GraphQL-osoite huomioiden laitteen sijainti (jos region == auto)
+  String get activeGraphqlUrl {
+    final pos = s.location.position;
+    return region.resolveGraphqlUrl(pos);
+  }
+
+  /// Aktiivinen geokoodauksen ja osoitehaun kohdistuspiste (focus point)
+  LatLng? get activeFocusPoint {
+    if (region != TransitRegion.auto && region.center != null) {
+      return region.center;
+    }
+    return s.location.position ?? region.center;
+  }
+
+  void setRegion(TransitRegion r) {
+    region = r;
+    s.repo.setTransitRegion(r.id);
+    notifyListeners();
+  }
 
   void setTile(TileSource t) {
     tile = t;
@@ -149,8 +179,7 @@ class LocationController extends ChangeNotifier {
   /// Onko saatu oikea laitteen GPS-sijainti.
   bool get hasRealGps => position != null;
 
-  LatLng get positionOrDefault =>
-      (position != null && isInGreaterHelsinki(position!)) ? position! : helsinki;
+  LatLng get positionOrDefault => position ?? (s.settings.region.center ?? helsinki);
 
   Future<void> locate() {
     return _locating ??= _doLocate().whenComplete(() => _locating = null);
@@ -161,7 +190,8 @@ class LocationController extends ChangeNotifier {
       state = await s.location.ensurePermission();
       if (state == LocationState.ready) {
         final pos = await s.location.current();
-        if (pos != null && isInGreaterHelsinki(pos)) {
+        if (pos != null) {
+          s.location.lastPosition = pos;
           position = pos;
         }
       }

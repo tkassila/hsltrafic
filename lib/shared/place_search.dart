@@ -3,23 +3,41 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../models/place_stop.dart';
+import '../models/transit_region.dart';
 import '../state/app_state.dart';
 import '../theme/hsl_colors.dart';
 
 /// Koko ruudun osoite-/paikkahaku. Palauttaa valitun [GeoPlace]n.
 ///
 /// [allowCurrent]: näytä "Oma sijainti" -vaihtoehto.
-Future<GeoPlace?> pickPlace(BuildContext context,
-    {String title = 'Hae osoite', bool allowCurrent = true}) {
+/// [isRailOnly]: priorisoi rautatieasemat ja kaupungit VR- ja junamatkoja varten.
+Future<GeoPlace?> pickPlace(
+  BuildContext context, {
+  String title = 'Hae osoite',
+  bool allowCurrent = true,
+  bool isRailOnly = false,
+}) {
   return Navigator.of(context).push<GeoPlace>(
-    MaterialPageRoute(builder: (_) => _PlaceSearchPage(title: title, allowCurrent: allowCurrent)),
+    MaterialPageRoute(
+      builder: (_) => _PlaceSearchPage(
+        title: title,
+        allowCurrent: allowCurrent,
+        isRailOnly: isRailOnly,
+      ),
+    ),
   );
 }
 
 class _PlaceSearchPage extends StatefulWidget {
   final String title;
   final bool allowCurrent;
-  const _PlaceSearchPage({required this.title, required this.allowCurrent});
+  final bool isRailOnly;
+
+  const _PlaceSearchPage({
+    required this.title,
+    required this.allowCurrent,
+    this.isRailOnly = false,
+  });
 
   @override
   State<_PlaceSearchPage> createState() => _PlaceSearchPageState();
@@ -57,7 +75,15 @@ class _PlaceSearchPageState extends State<_PlaceSearchPage> {
     setState(() => _loading = true);
     try {
       final loc = context.read<LocationController>();
-      final r = await context.read<Services>().api.autocomplete(text, focus: loc.position);
+      final settings = context.read<SettingsController>();
+      final effectiveFocus = (settings.region != TransitRegion.auto && settings.region != TransitRegion.finland && settings.region.center != null)
+          ? settings.region.center
+          : (loc.position ?? settings.region.center);
+      final r = await context.read<Services>().api.autocomplete(
+            text,
+            focus: effectiveFocus,
+            isRailOnly: widget.isRailOnly,
+          );
       if (!mounted || id != _seq) return;
       setState(() {
         _results = r;
@@ -140,8 +166,8 @@ class _PlaceSearchPageState extends State<_PlaceSearchPage> {
             Padding(padding: const EdgeInsets.all(16), child: Text(_error!)),
           for (final p in _results)
             ListTile(
-              leading: Icon(p.stopGtfsId != null ? Icons.directions_bus_rounded : Icons.place_outlined),
-              title: Text(p.label),
+              leading: _placeIcon(p),
+              title: Text(p.label, style: const TextStyle(fontWeight: FontWeight.w600)),
               subtitle: p.secondary == null ? null : Text(p.secondary!),
               onTap: () => Navigator.pop(context, p),
             ),
@@ -150,5 +176,32 @@ class _PlaceSearchPageState extends State<_PlaceSearchPage> {
         ],
       ),
     );
+  }
+
+  Widget _placeIcon(GeoPlace p) {
+    if (p.isCurrentLocation) {
+      return const Icon(Icons.my_location, color: Color(0xFF1E88E5));
+    }
+    final layer = p.layer?.toLowerCase();
+    if (layer == 'locality' || layer == 'localadmin') {
+      return const Icon(Icons.location_city_rounded, color: Color(0xFF1565C0));
+    }
+    if (layer == 'station') {
+      final fullText = '${p.label} ${p.secondary ?? ''}'.toLowerCase();
+      if (fullText.contains('linja-auto') || fullText.contains('bussi')) {
+        return const Icon(Icons.directions_bus_rounded, color: Color(0xFFE65100));
+      }
+      if (fullText.contains('metro') || fullText.contains('(m)')) {
+        return const Icon(Icons.subway_rounded, color: Color(0xFFFF5722));
+      }
+      return const Icon(Icons.train_rounded, color: Color(0xFF2E7D32));
+    }
+    if (layer == 'neighbourhood' || layer == 'borough' || layer == 'macrohood') {
+      return const Icon(Icons.holiday_village_rounded, color: Color(0xFF7B1FA2));
+    }
+    if (p.stopGtfsId != null || layer == 'stop') {
+      return const Icon(Icons.directions_bus_rounded, color: Color(0xFF007AC9));
+    }
+    return const Icon(Icons.place_outlined, color: Colors.grey);
   }
 }

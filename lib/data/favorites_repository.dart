@@ -45,11 +45,13 @@ class FavoritesRepository {
   }
 
   // Asetukset
-  String get tileSource => _p.getString('tile_source') ?? 'digitransit';
+  String get transitRegion => _p.getString('transit_region') ?? 'auto';
+  Future<void> setTransitRegion(String v) => _p.setString('transit_region', v);
+  String get tileSource => _p.getString('tile_source') ?? 'osm';
   Future<void> setTileSource(String v) => _p.setString('tile_source', v);
   String get themeMode => _p.getString('theme_mode') ?? 'dark';
   Future<void> setThemeMode(String v) => _p.setString('theme_mode', v);
-  int get nearbyRadius => _p.getInt('nearby_radius') ?? 1000;
+  int get nearbyRadius => _p.getInt('nearby_radius') ?? 1500;
   Future<void> setNearbyRadius(int v) => _p.setInt('nearby_radius', v);
   bool get notifications => _p.getBool('notifications') ?? false;
   Future<void> setNotifications(bool v) => _p.setBool('notifications', v);

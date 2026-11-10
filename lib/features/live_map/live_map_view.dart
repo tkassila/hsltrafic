@@ -11,6 +11,7 @@ import '../../models/transit_mode.dart';
 import '../../models/vehicle.dart';
 import '../../shared/base_map.dart';
 import '../../shared/mode_style.dart';
+import '../../shared/region_selector.dart';
 import '../../shared/street_view.dart';
 import '../../shared/widgets.dart';
 import '../../state/app_state.dart';
@@ -650,12 +651,16 @@ class _LiveMapViewState extends State<LiveMapView>
                       ),
                     ),
 
-                    // Mode Chips
+                    // Mode Chips & Region Selector
                     const SizedBox(height: 6),
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
                         children: [
+                          const Padding(
+                            padding: EdgeInsets.only(right: 6),
+                            child: TransitRegionSelectorPill(compact: true),
+                          ),
                           for (final mode in [
                             TransitMode.bus,
                             TransitMode.tram,
@@ -1498,6 +1503,27 @@ class _VehicleDetailCardState extends State<_VehicleDetailCard> {
                             '${vehicle.speedKmh.round()} km/h',
                             style: TextStyle(fontSize: 12, color: theme.hintColor),
                           ),
+                          if (vehicle.occupancy != null) ...[
+                            const SizedBox(width: 8),
+                            Icon(
+                              Icons.people_alt_rounded,
+                              size: 13,
+                              color: vehicle.occupancy! > 75
+                                  ? HslColors.safetyRed
+                                  : (vehicle.occupancy! > 35 ? HslColors.warningAmber : HslColors.successGreen),
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              '${vehicle.occupancy}%',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: vehicle.occupancy! > 75
+                                    ? HslColors.safetyRed
+                                    : (vehicle.occupancy! > 35 ? HslColors.warningAmber : HslColors.successGreen),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ],

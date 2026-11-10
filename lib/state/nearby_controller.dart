@@ -37,6 +37,15 @@ class NearbyController extends ChangeNotifier {
 
   NearbyController(this.s, this.loc, this.settings) {
     loc.addListener(_onLocationChanged);
+    settings.addListener(_onSettingsChanged);
+  }
+
+  void _onSettingsChanged() {
+    if (origin != null) return;
+    if (!loc.hasRealGps) {
+      clearSelection();
+      search();
+    }
   }
 
   bool isStopLoading(String stopId) => loadingStopId == stopId;
@@ -327,6 +336,7 @@ class NearbyController extends ChangeNotifier {
   @override
   void dispose() {
     loc.removeListener(_onLocationChanged);
+    settings.removeListener(_onSettingsChanged);
     _debounce?.cancel();
     super.dispose();
   }

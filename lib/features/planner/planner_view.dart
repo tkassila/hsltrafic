@@ -7,10 +7,12 @@ import 'package:provider/provider.dart';
 import '../../core/localization.dart';
 import '../../models/journey.dart';
 import '../../models/place_stop.dart';
+import '../../models/transit_mode.dart';
 import '../../models/trip_alarm.dart';
 import '../../shared/base_map.dart';
 import '../../shared/mode_style.dart';
 import '../../shared/place_search.dart';
+import '../../shared/region_selector.dart';
 import '../../shared/street_view.dart';
 import '../../shared/widgets.dart';
 import '../../state/alarm_controller.dart';
@@ -412,7 +414,19 @@ class _PlannerViewState extends State<PlannerView> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(AppStrings.get('tab_planner')),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                AppStrings.get('tab_planner'),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            const TransitRegionSelectorPill(compact: true),
+          ],
+        ),
         actions: [
           if (planner.results.isNotEmpty && _selectedLegIndex != null)
             TextButton.icon(
@@ -497,7 +511,8 @@ class _PlannerViewState extends State<PlannerView> {
                     icon: Icons.trip_origin_rounded,
                     iconColor: HslColors.successGreen,
                     onTap: () async {
-                      final p = await pickPlace(context, title: 'Lähtöpaikka');
+                      final isRailOnly = planner.modes.length == 1 && planner.modes.contains(TransitMode.rail);
+                      final p = await pickPlace(context, title: 'Lähtöpaikka', isRailOnly: isRailOnly);
                       if (p != null) {
                         planner.setFrom(p);
                         setState(() => _selectedLegIndex = null);
@@ -519,7 +534,8 @@ class _PlannerViewState extends State<PlannerView> {
                               icon: Icons.fmd_good_outlined,
                               iconColor: HslColors.warningAmber,
                               onTap: () async {
-                                final p = await pickPlace(context, title: 'Välipiste', allowCurrent: false);
+                                final isRailOnly = planner.modes.length == 1 && planner.modes.contains(TransitMode.rail);
+                                final p = await pickPlace(context, title: 'Välipiste', allowCurrent: false, isRailOnly: isRailOnly);
                                 if (p != null) {
                                   planner.removeVia(i);
                                   planner.addVia(p);
@@ -548,7 +564,8 @@ class _PlannerViewState extends State<PlannerView> {
                           icon: Icons.place_rounded,
                           iconColor: HslColors.safetyRed,
                           onTap: () async {
-                            final p = await pickPlace(context, title: 'Määränpää');
+                            final isRailOnly = planner.modes.length == 1 && planner.modes.contains(TransitMode.rail);
+                            final p = await pickPlace(context, title: 'Määränpää', isRailOnly: isRailOnly);
                             if (p != null) {
                               planner.setTo(p);
                               setState(() => _selectedLegIndex = null);
@@ -567,7 +584,54 @@ class _PlannerViewState extends State<PlannerView> {
                     ],
                   ),
 
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
+
+                  // Kulkumuotojen suodatus (VR-kaukojunat, bussit, ratikat, metro, lautat)
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        for (final mode in [
+                          TransitMode.rail,
+                          TransitMode.bus,
+                          TransitMode.tram,
+                          TransitMode.metro,
+                          TransitMode.ferry,
+                        ])
+                          Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: FilterChip(
+                              visualDensity: VisualDensity.compact,
+                              label: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    mode.icon,
+                                    size: 14,
+                                    color: planner.modes.contains(mode) ? Colors.white : mode.color,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    mode == TransitMode.rail ? 'Juna (VR & lähijunat)' : mode.label,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: planner.modes.contains(mode) ? Colors.white : null,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              selected: planner.modes.contains(mode),
+                              selectedColor: mode.color,
+                              checkmarkColor: Colors.white,
+                              onSelected: (_) => planner.toggleMode(mode),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 6),
 
                   // Action row (Add waypoint & Search button)
                   Row(
@@ -576,7 +640,8 @@ class _PlannerViewState extends State<PlannerView> {
                         icon: const Icon(Icons.add_location_alt_outlined, size: 16),
                         label: Text(AppStrings.get('add_via'), style: const TextStyle(fontSize: 12)),
                         onPressed: () async {
-                          final p = await pickPlace(context, title: 'Lisää välipiste', allowCurrent: false);
+                          final isRailOnly = planner.modes.length == 1 && planner.modes.contains(TransitMode.rail);
+                          final p = await pickPlace(context, title: 'Lisää välipiste', allowCurrent: false, isRailOnly: isRailOnly);
                           if (p != null) planner.addVia(p);
                         },
                       ),
@@ -623,7 +688,7 @@ class _PlannerViewState extends State<PlannerView> {
                     options: MapOptions(
                       initialCenter: selectedItinerary.allPoints.isNotEmpty
                           ? selectedItinerary.allPoints.first
-                          : const LatLng(60.1699, 24.9384),
+                          : (settings.region.center ?? const LatLng(60.1699, 24.9384)),
                       initialZoom: 13.0,
                     ),
                     children: [

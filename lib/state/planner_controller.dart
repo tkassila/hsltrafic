@@ -6,6 +6,7 @@ import '../data/location_service.dart';
 import '../models/journey.dart';
 import '../models/place_stop.dart';
 import '../models/transit_mode.dart';
+import '../models/transit_region.dart';
 import 'app_state.dart';
 
 /// Reittioppaan tila: lähtö, määränpää, välipisteet, aika, kulkumuodot ja tulokset.
@@ -28,6 +29,20 @@ class PlannerController extends ChangeNotifier {
 
   PlannerController(this.s, this.loc) {
     from = currentLocationPlace;
+    s.settings.addListener(_onSettingsChanged);
+  }
+
+  void _onSettingsChanged() {
+    if ((from == null || from!.isCurrentLocation) && !loc.hasRealGps) {
+      from = currentLocationPlace;
+      notifyListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    s.settings.removeListener(_onSettingsChanged);
+    super.dispose();
   }
 
   Itinerary? get selected => results.isEmpty ? null : results[selectedIndex.clamp(0, results.length - 1)];
@@ -129,8 +144,13 @@ class PlannerController extends ChangeNotifier {
     await search();
   }
 
-  Future<List<GeoPlace>> suggest(String text) =>
-      s.api.autocomplete(text, focus: loc.position);
+  Future<List<GeoPlace>> suggest(String text) {
+    final effectiveFocus = (s.settings.region != TransitRegion.auto && s.settings.region != TransitRegion.finland && s.settings.region.center != null)
+        ? s.settings.region.center
+        : (loc.position ?? s.settings.region.center);
+    final isRailOnly = modes.length == 1 && modes.contains(TransitMode.rail);
+    return s.api.autocomplete(text, focus: effectiveFocus, isRailOnly: isRailOnly);
+  }
 
   Future<GeoPlace?> reverse(LatLng p) async {
     try {

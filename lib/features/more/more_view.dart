@@ -4,6 +4,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/localization.dart';
 import '../../data/safety_contacts.dart';
+import '../../models/transit_region.dart';
+import '../../shared/region_selector.dart';
 import '../../state/app_state.dart';
 import '../../theme/hsl_colors.dart';
 
@@ -11,6 +13,7 @@ enum _MoreSection {
   emergency,
   alerts,
   settings,
+  help,
 }
 
 class MoreView extends StatefulWidget {
@@ -293,6 +296,21 @@ class _MoreViewState extends State<MoreView> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 child: Column(
                   children: [
+                    // Transit Region & Routing Server
+                    ListTile(
+                      leading: const Icon(Icons.location_city_rounded, color: HslColors.primaryBlue),
+                      title: const Text('Liikennealue & Paikkakunta'),
+                      subtitle: Text(
+                        settings.region == TransitRegion.auto
+                            ? '${settings.region.name} • ${settings.region.effectiveDisplayName(settings.s.location.position)}'
+                            : '${settings.region.name}\n${settings.region.description}',
+                      ),
+                      trailing: const Icon(Icons.chevron_right_rounded),
+                      onTap: () => showTransitRegionSheet(context),
+                    ),
+
+                    const Divider(height: 1),
+
                     // Map Tile Source
                     ListTile(
                       leading: const Icon(Icons.layers_rounded, color: HslColors.primaryBlue),
@@ -306,6 +324,37 @@ class _MoreViewState extends State<MoreView> {
                             .toList(),
                         onChanged: (v) {
                           if (v != null) settings.setTile(v);
+                        },
+                      ),
+                    ),
+
+                    const Divider(height: 1),
+
+                    // Nearby stops search radius
+                    ListTile(
+                      leading: const Icon(Icons.radar_rounded, color: HslColors.primaryBlue),
+                      title: Text(AppStrings.get('search_radius')),
+                      subtitle: Text(
+                        settings.nearbyRadius >= 1000
+                            ? '${(settings.nearbyRadius / 1000).toStringAsFixed(settings.nearbyRadius % 1000 == 0 ? 0 : 1)} km'
+                            : '${settings.nearbyRadius} m',
+                      ),
+                      trailing: DropdownButton<int>(
+                        value: [500, 800, 1000, 1500, 2000, 2500, 3000].contains(settings.nearbyRadius)
+                            ? settings.nearbyRadius
+                            : 1500,
+                        underline: const SizedBox(),
+                        items: const [
+                          DropdownMenuItem(value: 500, child: Text('500 m')),
+                          DropdownMenuItem(value: 800, child: Text('800 m')),
+                          DropdownMenuItem(value: 1000, child: Text('1,0 km')),
+                          DropdownMenuItem(value: 1500, child: Text('1,5 km')),
+                          DropdownMenuItem(value: 2000, child: Text('2,0 km')),
+                          DropdownMenuItem(value: 2500, child: Text('2,5 km')),
+                          DropdownMenuItem(value: 3000, child: Text('3,0 km')),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) settings.setNearbyRadius(v);
                         },
                       ),
                     ),
@@ -366,9 +415,144 @@ class _MoreViewState extends State<MoreView> {
               ),
             ),
 
+          const SizedBox(height: 4),
+
+          // 4. Section: Ohje & Paikkakunnat (Help & Regions)
+          _buildSectionHeader(
+            section: _MoreSection.help,
+            icon: Icons.help_outline_rounded,
+            iconColor: HslColors.primaryBlue,
+            title: AppStrings.get('help_and_info'),
+            badgeText: 'Waltti & Suomi',
+          ),
+          if (_openSection == _MoreSection.help)
+            Padding(
+              padding: const EdgeInsets.only(left: 8, bottom: 8),
+              child: Card(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Waltti-kaupungit
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: HslColors.primaryBlue.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.location_city_rounded, color: HslColors.primaryBlue, size: 22),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  AppStrings.get('waltti_cities_title'),
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  AppStrings.get('waltti_cities_desc'),
+                                  style: TextStyle(fontSize: 13, color: theme.hintColor, height: 1.35),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: theme.brightness == Brightness.dark
+                              ? theme.colorScheme.surfaceContainerHigh
+                              : Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: theme.dividerColor.withValues(alpha: 0.3)),
+                        ),
+                        child: Text(
+                          AppStrings.get('waltti_cities_list'),
+                          style: const TextStyle(fontSize: 13, height: 1.5, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Divider(height: 1),
+                      const SizedBox(height: 14),
+
+                      // Muut alueet
+                      _buildHelpRegionItem(
+                        icon: Icons.tram_rounded,
+                        title: 'HSL',
+                        desc: AppStrings.get('region_guide_hsl'),
+                      ),
+                      const SizedBox(height: 10),
+                      _buildHelpRegionItem(
+                        icon: Icons.train_rounded,
+                        title: 'VR & Kaukoliikenne',
+                        desc: AppStrings.get('region_guide_finland'),
+                      ),
+                      const SizedBox(height: 10),
+                      _buildHelpRegionItem(
+                        icon: Icons.my_location_rounded,
+                        title: 'Automaattinen GPS',
+                        desc: AppStrings.get('region_guide_auto'),
+                      ),
+                      const SizedBox(height: 10),
+                      _buildHelpRegionItem(
+                        icon: Icons.alt_route_rounded,
+                        title: 'Reittiopas & Kaukoliikenne',
+                        desc: AppStrings.get('region_guide_intercity'),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.tonalIcon(
+                          icon: const Icon(Icons.tune_rounded, size: 18),
+                          label: Text(AppStrings.get('transit_region_title')),
+                          onPressed: () => showTransitRegionSheet(context),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
           const SizedBox(height: 30),
         ],
       ),
+    );
+  }
+
+  Widget _buildHelpRegionItem({
+    required IconData icon,
+    required String title,
+    required String desc,
+  }) {
+    final theme = Theme.of(context);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: HslColors.primaryBlue),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              const SizedBox(height: 2),
+              Text(desc, style: TextStyle(fontSize: 12, color: theme.hintColor, height: 1.3)),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
