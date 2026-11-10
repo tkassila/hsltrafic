@@ -75,7 +75,7 @@ class HslTrafficApp extends StatelessWidget {
     final settings = context.watch<SettingsController>();
 
     return MaterialApp(
-      title: 'HSL Liikenne & Reittiopas',
+      title: 'FI Liikenne & Reittiopas',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,

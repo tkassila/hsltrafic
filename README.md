@@ -1,4 +1,4 @@
-# HSL Liikenne & Reittiopas (Flutter)
+# FI Liikenne & Reittiopas (Flutter)
 
 Moderni, monipuolinen ja responsiivinen Flutter-sovellus pääkaupunkiseudun (HSL), Waltti-kaupunkiseutujen (Tampere, Turku, Oulu, Jyväskylä, Kuopio, Lahti ym.) sekä koko Suomen VR-kaukoliikenteen reaaliaikaiseen seurantaan, reittisuunnitteluun ja turvallisuuteen niin puhelimilla kuin tableteilla.
 
@@ -157,7 +157,7 @@ Moderni, monipuolinen ja responsiivinen Flutter-sovellus pääkaupunkiseudun (HS
 - **Android-sovellusikoni & brändi**:
   - HSL-brändin mukainen moderni ja tyylikäs joukkoliikenneikoni (HSL-sininen tausta, valkoinen virtaviivainen kulkuneuvosilhuetti, heijastustuulilasi, LED-linjataulu ja elävä GPS-reittikaari).
   - Täysi tuki Android 8+ (API 26+) mukautuville kuvakkeille (`Adaptive Icon` / `mipmap-anydpi-v26`), pyöreille kuvakkeille (`ic_launcher_round.png`) ja squircle-kuvakkeille kaikilla tiheyksillä (mdpi, hdpi, xhdpi, xxhdpi, xxxhdpi) sekä 512×512 Google Play -assetille (`assets/icon/app_icon.png`).
-  - Sovelluksen nimi Android-laitteen kotinäytöllä selkeästi **"HSL Liikenne"**.
+  - Sovelluksen nimi Android-laitteen kotinäytöllä selkeästi **"FI Liikenne"**.
 
 ---
 

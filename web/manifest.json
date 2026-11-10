@@ -1,6 +1,6 @@
 {
-    "name": "hsltrafic",
-    "short_name": "hsltrafic",
+    "name": "FI Liikenne",
+    "short_name": "FI Liikenne",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
