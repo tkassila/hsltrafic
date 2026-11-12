@@ -12,7 +12,6 @@ import '../../data/location_service.dart';
 import '../../models/line.dart';
 import '../../models/place_stop.dart';
 import '../../models/transit_mode.dart';
-import '../../models/trip_alarm.dart';
 import '../../shared/base_map.dart';
 import '../../shared/mode_style.dart';
 import '../../shared/occupancy_dialog.dart';
@@ -25,6 +24,7 @@ import '../../state/app_state.dart';
 import '../../state/nearby_controller.dart';
 import '../../theme/hsl_colors.dart';
 import '../alarms/alarm_management_dialog.dart';
+import '../alarms/set_trip_alarm_dialog.dart';
 
 class NearbyStopsView extends StatefulWidget {
   const NearbyStopsView({super.key});
@@ -69,14 +69,12 @@ class _NearbyStopsViewState extends State<NearbyStopsView> {
 
   Future<void> _setAlarmForDeparture(Stop stop, Departure dep) async {
     HapticFeedback.heavyImpact();
-    final alarmCtrl = context.read<AlarmController>();
     final walkMinutes = stop.distance != null ? (stop.distance! / 70).ceil() : 0;
     final walkStartTime = dep.realtime.subtract(Duration(minutes: walkMinutes));
-    final alarmTime = walkStartTime.subtract(const Duration(minutes: 7));
-
     final stopLabel = '${stop.name}${stop.code != null ? " (${stop.code})" : ""}';
-    final alarm = TripAlarm(
-      id: 'nearby_${DateTime.now().millisecondsSinceEpoch}_${dep.line}_${dep.realtime.millisecondsSinceEpoch}',
+
+    await SetTripAlarmDialog.show(
+      context,
       title: '${dep.mode.label} ${dep.line}',
       line: dep.line,
       mode: dep.mode,
@@ -84,39 +82,7 @@ class _NearbyStopsViewState extends State<NearbyStopsView> {
       stopName: stopLabel,
       departureTime: dep.realtime,
       walkStartTime: walkStartTime,
-      alarmTime: alarmTime,
       source: 'nearby',
-    );
-
-    final totalActive = await alarmCtrl.addAlarm(alarm);
-    if (!mounted) return;
-
-    final hmStr = hm(alarmTime);
-    final routeDesc = '${dep.line} ${dep.headsign}';
-
-    final String message;
-    if (totalActive > 1) {
-      message = 'Hälytys asetettu klo $hmStr ($routeDesc, 7 min ennen kävelyä).\nHuomio: Sinulla on nyt $totalActive aktiivista hälytystä!';
-    } else {
-      message = 'Hälytys asetettu klo $hmStr ($routeDesc, 7 min ennen kävelyä).';
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: HslColors.primaryBlue,
-        duration: const Duration(seconds: 4),
-        action: SnackBarAction(
-          label: 'Hälytykset',
-          textColor: Colors.white,
-          onPressed: () {
-            showDialog(
-              context: context,
-              builder: (_) => const AlarmManagementDialog(),
-            );
-          },
-        ),
-      ),
     );
   }
 
@@ -1999,7 +1965,7 @@ class _NearbyStopsViewState extends State<NearbyStopsView> {
                                                       child: Row(
                                                         children: [
                                                           Tooltip(
-                                                            message: 'Paina pitkään: aseta huomiohälytys (kävely - 7 min)',
+                                                            message: 'Paina pitkään: aseta huomiohälytys',
                                                             child: GestureDetector(
                                                               behavior: HitTestBehavior.opaque,
                                                               onLongPress: () {

@@ -55,4 +55,10 @@ class FavoritesRepository {
   Future<void> setNearbyRadius(int v) => _p.setInt('nearby_radius', v);
   bool get notifications => _p.getBool('notifications') ?? false;
   Future<void> setNotifications(bool v) => _p.setBool('notifications', v);
+  String get alarmSoundType => _p.getString('alarm_sound_type') ?? 'siren';
+  Future<void> setAlarmSoundType(String v) => _p.setString('alarm_sound_type', v);
+  double get alarmVolume => _p.getDouble('alarm_volume') ?? 1.0;
+  Future<void> setAlarmVolume(double v) => _p.setDouble('alarm_volume', v);
+  int get alarmLeadMinutes => _p.getInt('alarm_lead_minutes') ?? 7;
+  Future<void> setAlarmLeadMinutes(int v) => _p.setInt('alarm_lead_minutes', v.clamp(2, 30));
 }

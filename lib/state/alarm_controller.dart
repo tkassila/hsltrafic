@@ -1,25 +1,43 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 import '../data/notification_service.dart';
+import '../models/alarm_sound_type.dart';
 import '../models/transit_mode.dart';
 import '../models/trip_alarm.dart';
 import 'app_state.dart';
 
 /// Hallinnoi käyttäjän matkahälytyksiä ja huomiohälytysäänen toistoa.
 class AlarmController extends ChangeNotifier {
+  static const Duration alarmDuration = Duration(minutes: 2);
+
   final Services _services;
   final NotificationService _notifications;
+  final AudioPlayer? _injectedPlayer;
   final List<TripAlarm> _alarms = [];
+
   Timer? _checkTimer;
-  Timer? _soundTimer;
+  Timer? _vibrateTimer;
   Timer? _ringTimeoutTimer;
+  Timer? _countdownTimer;
+  Timer? _previewTimer;
 
+  AudioPlayer? _audioPlayer;
+  AudioPlayer? _previewPlayer;
   TripAlarm? _ringingAlarm;
+  DateTime? _ringingStartTime;
+  int _ringingRemainingSeconds = 120;
+  bool _isPreviewing = false;
 
-  AlarmController(this._services, [NotificationService? notifications])
-      : _notifications = notifications ?? NotificationService.instance {
+  AlarmController(
+    this._services, [
+    NotificationService? notifications,
+    AudioPlayer? injectedPlayer,
+  ])  : _notifications = notifications ?? NotificationService.instance,
+        _injectedPlayer = injectedPlayer {
     _loadFromStorage();
     _checkTimer = Timer.periodic(const Duration(seconds: 2), (_) => _checkAlarms());
   }
@@ -33,6 +51,18 @@ class AlarmController extends ChangeNotifier {
 
   TripAlarm? get ringingAlarm => _ringingAlarm;
   bool get isRinging => _ringingAlarm != null;
+  int get ringingRemainingSeconds => _ringingRemainingSeconds;
+  bool get isPreviewing => _isPreviewing;
+
+  bool get _canUseAudioPlayer {
+    if (_injectedPlayer != null) return true;
+    if (kIsWeb) return true;
+    try {
+      return !Platform.environment.containsKey('FLUTTER_TEST');
+    } catch (_) {
+      return true;
+    }
+  }
 
   void _loadFromStorage() {
     try {
@@ -131,44 +161,172 @@ class AlarmController extends ChangeNotifier {
     }
   }
 
-  /// Käynnistää pitkään soivan huomiohälytyksen.
+  /// Käynnistää huomiohälytyksen (maksimikesto 2 minuuttia tai kunnes kuitataan).
   void triggerAlarm(TripAlarm alarm) {
     _ringingAlarm = alarm;
+    _ringingStartTime = DateTime.now();
+    _ringingRemainingSeconds = 120;
     alarm.isTriggered = true;
     _saveToStorage();
 
-    // Toistuva hälytysääni ja värinä
-    _playAlertSoundAndVibration();
-    _soundTimer?.cancel();
-    _soundTimer = Timer.periodic(const Duration(milliseconds: 1400), (_) {
-      _playAlertSoundAndVibration();
+    // Käynnistetään voimakas hälytysääni ja toistuva värinä
+    _startAlarmAudioAndVibration();
+
+    // Automaattinen hiljennys maksimissaan 2 minuutin kuluttua
+    _ringTimeoutTimer?.cancel();
+    _ringTimeoutTimer = Timer(alarmDuration, () {
+      dismissRinging();
     });
 
-    // Automaattinen hiljennys 90 sekunnin kuluttua
-    _ringTimeoutTimer?.cancel();
-    _ringTimeoutTimer = Timer(const Duration(seconds: 90), () {
-      dismissRinging();
+    // Sekuntilaskuri käyttöliittymälle
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_ringingAlarm == null || _ringingStartTime == null) {
+        timer.cancel();
+        return;
+      }
+      final elapsed = DateTime.now().difference(_ringingStartTime!).inSeconds;
+      final remaining = (120 - elapsed).clamp(0, 120);
+      _ringingRemainingSeconds = remaining;
+      notifyListeners();
+      if (remaining <= 0) {
+        timer.cancel();
+        dismissRinging();
+      }
     });
 
     notifyListeners();
   }
 
-  void _playAlertSoundAndVibration() {
+  Future<void> _startAlarmAudioAndVibration() async {
+    _playVibration();
+    _vibrateTimer?.cancel();
+    _vibrateTimer = Timer.periodic(const Duration(milliseconds: 1400), (_) {
+      _playVibration();
+    });
+
+    if (!_canUseAudioPlayer) {
+      _playSystemAlert();
+      return;
+    }
+
     try {
-      SystemSound.play(SystemSoundType.alert);
-    } catch (_) {}
+      _audioPlayer ??= _injectedPlayer ?? AudioPlayer();
+      await _audioPlayer!.setAudioContext(AudioContext(
+        android: const AudioContextAndroid(
+          isSpeakerphoneOn: true,
+          stayAwake: true,
+          contentType: AndroidContentType.sonification,
+          usageType: AndroidUsageType.alarm,
+          audioFocus: AndroidAudioFocus.gainTransientExclusive,
+        ),
+        iOS: AudioContextIOS(
+          category: AVAudioSessionCategory.playback,
+          options: const {
+            AVAudioSessionOptions.duckOthers,
+          },
+        ),
+      ));
+
+      await _audioPlayer!.setReleaseMode(ReleaseMode.loop);
+      final volume = _services.settings.alarmVolume;
+      await _audioPlayer!.setVolume(volume);
+
+      final sound = _services.settings.alarmSound;
+      await _audioPlayer!.play(AssetSource(sound.assetPath));
+    } catch (e) {
+      debugPrint('Error starting alarm audio player: $e');
+      _playSystemAlert();
+    }
+  }
+
+  void _playVibration() {
     try {
       HapticFeedback.heavyImpact();
     } catch (_) {}
   }
 
-  /// Kuittaa tai hiljentää soivan hälytyksen.
+  void _playSystemAlert() {
+    try {
+      SystemSound.play(SystemSoundType.alert);
+    } catch (_) {}
+  }
+
+  /// Esikuuntele valittua hälytysääntä ja äänenvoimakkuutta.
+  Future<void> previewSound(AlarmSoundType sound, double volume) async {
+    await stopPreview();
+    if (!_canUseAudioPlayer) {
+      _playSystemAlert();
+      return;
+    }
+
+    try {
+      _previewPlayer ??= _injectedPlayer ?? AudioPlayer();
+      await _previewPlayer!.setAudioContext(AudioContext(
+        android: const AudioContextAndroid(
+          isSpeakerphoneOn: true,
+          contentType: AndroidContentType.sonification,
+          usageType: AndroidUsageType.alarm,
+        ),
+        iOS: AudioContextIOS(
+          category: AVAudioSessionCategory.playback,
+          options: const {
+            AVAudioSessionOptions.duckOthers,
+          },
+        ),
+      ));
+
+      await _previewPlayer!.setVolume(volume.clamp(0.0, 1.0));
+      await _previewPlayer!.setReleaseMode(ReleaseMode.stop);
+      _isPreviewing = true;
+      notifyListeners();
+
+      await _previewPlayer!.play(AssetSource(sound.assetPath));
+
+      _previewTimer?.cancel();
+      _previewTimer = Timer(const Duration(seconds: 4), () {
+        stopPreview();
+      });
+    } catch (e) {
+      debugPrint('Error previewing sound: $e');
+      _playSystemAlert();
+      _isPreviewing = false;
+      notifyListeners();
+    }
+  }
+
+  /// Pysäyttää esikuuntelun.
+  Future<void> stopPreview() async {
+    _previewTimer?.cancel();
+    _previewTimer = null;
+    if (_previewPlayer != null) {
+      try {
+        await _previewPlayer!.stop();
+      } catch (_) {}
+    }
+    if (_isPreviewing) {
+      _isPreviewing = false;
+      notifyListeners();
+    }
+  }
+
+  /// Kuittaa tai hiljentää soivan hälytyksen välittömästi.
   void dismissRinging() {
-    _soundTimer?.cancel();
-    _soundTimer = null;
     _ringTimeoutTimer?.cancel();
     _ringTimeoutTimer = null;
+    _countdownTimer?.cancel();
+    _countdownTimer = null;
+    _vibrateTimer?.cancel();
+    _vibrateTimer = null;
+
+    if (_audioPlayer != null) {
+      try {
+        _audioPlayer!.stop();
+      } catch (_) {}
+    }
+
     _ringingAlarm = null;
+    _ringingRemainingSeconds = 120;
     notifyListeners();
   }
 
@@ -193,8 +351,12 @@ class AlarmController extends ChangeNotifier {
   @override
   void dispose() {
     _checkTimer?.cancel();
-    _soundTimer?.cancel();
+    _vibrateTimer?.cancel();
     _ringTimeoutTimer?.cancel();
+    _countdownTimer?.cancel();
+    _previewTimer?.cancel();
+    _audioPlayer?.dispose();
+    _previewPlayer?.dispose();
     super.dispose();
   }
 }

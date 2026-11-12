@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.metait" "\0"
-            VALUE "FileDescription", "hsltrafic" "\0"
+            VALUE "FileDescription", "FI Liikenne" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
             VALUE "InternalName", "hsltrafic" "\0"
             VALUE "LegalCopyright", "Copyright (C) 2026 com.metait. All rights reserved." "\0"
             VALUE "OriginalFilename", "hsltrafic.exe" "\0"
-            VALUE "ProductName", "hsltrafic" "\0"
+            VALUE "ProductName", "FI Liikenne" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

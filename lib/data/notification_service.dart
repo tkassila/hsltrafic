@@ -125,6 +125,7 @@ class NotificationService {
         vibrationPattern: Int64List.fromList([0, 1000, 500, 1000, 500, 1000]),
         fullScreenIntent: true,
         category: AndroidNotificationCategory.alarm,
+        audioAttributesUsage: AudioAttributesUsage.alarm,
         styleInformation: BigTextStyleInformation(
           'Kävelyn alkuun on 7 minuuttia!\n'
           '${alarm.stopName != null ? "Pysäkki: ${alarm.stopName}\n" : ""}'

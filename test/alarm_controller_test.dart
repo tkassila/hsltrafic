@@ -7,8 +7,10 @@ import 'package:hsltrafic/data/favorites_repository.dart';
 import 'package:hsltrafic/data/hfp_service.dart';
 import 'package:hsltrafic/data/location_service.dart';
 import 'package:hsltrafic/features/alarms/alarm_management_dialog.dart';
+import 'package:hsltrafic/features/alarms/set_trip_alarm_dialog.dart';
 import 'package:hsltrafic/features/nearby/nearby_stops_view.dart';
 import 'package:hsltrafic/features/planner/planner_view.dart';
+import 'package:hsltrafic/models/alarm_sound_type.dart';
 import 'package:hsltrafic/models/journey.dart';
 import 'package:hsltrafic/models/place_stop.dart';
 import 'package:hsltrafic/models/transit_mode.dart';
@@ -164,6 +166,73 @@ void main() {
 
       controller.dispose();
     });
+
+    test('AlarmController ringing duration is 2 minutes (120 seconds)', () {
+      expect(AlarmController.alarmDuration, equals(const Duration(minutes: 2)));
+      final controller = AlarmController(services);
+      final now = DateTime.now();
+      final alarm = TripAlarm(
+        id: 'alarm_duration_test',
+        title: 'Bussi 550',
+        mode: TransitMode.bus,
+        destination: 'Itäkeskus',
+        departureTime: now.add(const Duration(minutes: 10)),
+        walkStartTime: now.add(const Duration(minutes: 8)),
+        alarmTime: now.subtract(const Duration(seconds: 1)),
+        source: 'test',
+      );
+
+      controller.triggerAlarm(alarm);
+      expect(controller.isRinging, isTrue);
+      expect(controller.ringingRemainingSeconds, equals(120));
+
+      controller.dismissRinging();
+      expect(controller.isRinging, isFalse);
+      expect(controller.ringingRemainingSeconds, equals(120));
+      controller.dispose();
+    });
+
+    test('AlarmSoundType and volume settings persist and update correctly', () {
+      final settings = SettingsController(services);
+      expect(settings.alarmSound, equals(AlarmSoundType.siren));
+      expect(settings.alarmVolume, equals(1.0));
+
+      settings.setAlarmSound(AlarmSoundType.digitalClock);
+      expect(settings.alarmSound, equals(AlarmSoundType.digitalClock));
+      expect(repo.alarmSoundType, equals('digital_clock'));
+
+      settings.setAlarmSound(AlarmSoundType.transitChime);
+      expect(settings.alarmSound, equals(AlarmSoundType.transitChime));
+      expect(repo.alarmSoundType, equals('transit_chime'));
+
+      settings.setAlarmSound(AlarmSoundType.emergencyPulse);
+      expect(settings.alarmSound, equals(AlarmSoundType.emergencyPulse));
+      expect(repo.alarmSoundType, equals('emergency_pulse'));
+
+      settings.setAlarmVolume(0.8);
+      expect(settings.alarmVolume, equals(0.8));
+      expect(repo.alarmVolume, equals(0.8));
+
+      // Bounds clamping
+      settings.setAlarmVolume(1.5);
+      expect(settings.alarmVolume, equals(1.0));
+      settings.setAlarmVolume(-0.5);
+      expect(settings.alarmVolume, equals(0.0));
+
+      // Alarm lead minutes (default 7, range 2-30)
+      expect(settings.alarmLeadMinutes, equals(7));
+      expect(repo.alarmLeadMinutes, equals(7));
+
+      settings.setAlarmLeadMinutes(15);
+      expect(settings.alarmLeadMinutes, equals(15));
+      expect(repo.alarmLeadMinutes, equals(15));
+
+      // Clamping 2 - 30 min
+      settings.setAlarmLeadMinutes(1);
+      expect(settings.alarmLeadMinutes, equals(2));
+      settings.setAlarmLeadMinutes(45);
+      expect(settings.alarmLeadMinutes, equals(30));
+    });
   });
 
   group('Alarm UI integration tests', () {
@@ -303,6 +372,16 @@ void main() {
       await tester.longPress(badgeFinder);
       await tester.pumpAndSettle();
 
+      // SetTripAlarmDialog opens with default 7 min
+      expect(find.text('Aseta huomiohälytys'), findsOneWidget);
+      expect(find.textContaining('7 min (oletus)'), findsOneWidget);
+
+      final confirmBtn = find.byKey(const ValueKey('set_trip_alarm_confirm_button'));
+      expect(confirmBtn, findsOneWidget);
+      await tester.ensureVisible(confirmBtn);
+      await tester.tap(confirmBtn);
+      await tester.pumpAndSettle();
+
       // Verify alarm was created with walkStartTime - 7 min
       expect(alarmCtrl.alarms.length, equals(1));
       final createdAlarm = alarmCtrl.alarms.first;
@@ -383,13 +462,25 @@ void main() {
       final lineBadgeFinder = find.byType(LineBadge);
       expect(lineBadgeFinder, findsOneWidget);
 
-      // Long press line box
+      // Long press line box opens SetTripAlarmDialog
       await tester.longPress(lineBadgeFinder);
+      await tester.pumpAndSettle();
+
+      // Dialog is displayed with default 7 min
+      expect(find.text('Aseta huomiohälytys'), findsOneWidget);
+      expect(find.textContaining('7 min (oletus)'), findsOneWidget);
+
+      // Confirm alarm by tapping 'Aseta hälytys'
+      final confirmBtn = find.byKey(const ValueKey('set_trip_alarm_confirm_button'));
+      expect(confirmBtn, findsOneWidget);
+      await tester.ensureVisible(confirmBtn);
+      await tester.tap(confirmBtn);
       await tester.pumpAndSettle();
 
       // Verify alarm was added
       expect(alarmCtrl.alarms.length, equals(2));
       final nearbyAlarm = alarmCtrl.alarms.firstWhere((a) => a.line == '550');
+      expect(nearbyAlarm.leadMinutes, equals(7));
       // Walk time = 3 min, alarm time = 25 - 3 - 7 = 15 min from now
       expect(nearbyAlarm.walkStartTime, equals(depTime.subtract(const Duration(minutes: 3))));
       expect(nearbyAlarm.alarmTime, equals(depTime.subtract(const Duration(minutes: 10))));
@@ -397,6 +488,68 @@ void main() {
       // Verify SnackBar was shown AND alerted about having > 1 alarms active!
       expect(find.byType(SnackBar), findsOneWidget);
       expect(find.textContaining('Sinulla on nyt 2 aktiivista hälytystä'), findsOneWidget);
+    });
+
+    testWidgets('SetTripAlarmDialog allows selecting custom lead time (e.g. 15 min) and saves correctly', (tester) async {
+      final now = DateTime.now();
+      final depTime = now.add(const Duration(minutes: 40));
+      final walkTime = depTime.subtract(const Duration(minutes: 5));
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: settings),
+            ChangeNotifierProvider.value(value: alarmCtrl),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: Builder(
+                builder: (context) => ElevatedButton(
+                  onPressed: () => SetTripAlarmDialog.show(
+                    context,
+                    title: 'Bussi 550',
+                    line: '550',
+                    mode: TransitMode.bus,
+                    destination: 'Itäkeskus',
+                    stopName: 'Otaniemi',
+                    departureTime: depTime,
+                    walkStartTime: walkTime,
+                    source: 'test',
+                  ),
+                  child: const Text('Avaa'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Avaa'));
+      await tester.pumpAndSettle();
+
+      // Dialog is open with default 7 min
+      expect(find.text('Aseta huomiohälytys'), findsOneWidget);
+      expect(find.textContaining('7 min'), findsWidgets);
+
+      // Select 15 min chip
+      await tester.tap(find.text('15 min'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('15 min'), findsWidgets);
+
+      // Confirm
+      final confirmBtn = find.byKey(const ValueKey('set_trip_alarm_confirm_button'));
+      expect(confirmBtn, findsOneWidget);
+      await tester.ensureVisible(confirmBtn);
+      await tester.tap(confirmBtn);
+      await tester.pumpAndSettle();
+
+      // Check alarm properties
+      expect(alarmCtrl.alarms.length, equals(1));
+      final alarm = alarmCtrl.alarms.first;
+      expect(alarm.leadMinutes, equals(15));
+      expect(alarm.alarmTime, equals(walkTime.subtract(const Duration(minutes: 15))));
     });
   });
 }

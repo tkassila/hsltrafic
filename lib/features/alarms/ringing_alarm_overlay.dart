@@ -95,11 +95,52 @@ class _RingingAlarmOverlayState extends State<RingingAlarmOverlay>
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
-                    'Kävelyn alkuun 7 minuuttia!',
-                    style: TextStyle(
+                  Text(
+                    'Kävelyn alkuun ${alarm.leadMinutes} minuuttia!',
+                    style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  // 2 min countdown timer badge
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.timer_outlined, size: 16, color: Colors.redAccent),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Soi vielä: ${alarmCtrl.ringingRemainingSeconds ~/ 60}:${(alarmCtrl.ringingRemainingSeconds % 60).toString().padLeft(2, '0')} (max 2 min)',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.redAccent,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: SizedBox(
+                            width: 180,
+                            height: 4,
+                            child: LinearProgressIndicator(
+                              value: (alarmCtrl.ringingRemainingSeconds / 120).clamp(0.0, 1.0),
+                              backgroundColor: Colors.redAccent.withValues(alpha: 0.2),
+                              valueColor: const AlwaysStoppedAnimation<Color>(Colors.redAccent),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 16),

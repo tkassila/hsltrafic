@@ -5,6 +5,7 @@ import '../data/digitransit_client.dart';
 import '../data/favorites_repository.dart';
 import '../data/hfp_service.dart';
 import '../data/location_service.dart';
+import '../models/alarm_sound_type.dart';
 import '../models/line.dart';
 import '../models/place_stop.dart';
 import '../models/transit_region.dart';
@@ -40,6 +41,9 @@ class SettingsController extends ChangeNotifier {
   ThemeMode themeMode = ThemeMode.dark;
   late int nearbyRadius = s.repo.nearbyRadius;
   late TransitRegion region = TransitRegion.byId(s.repo.transitRegion);
+  late AlarmSoundType alarmSound = AlarmSoundType.fromId(s.repo.alarmSoundType);
+  late double alarmVolume = s.repo.alarmVolume;
+  late int alarmLeadMinutes = s.repo.alarmLeadMinutes;
 
   SettingsController(this.s) {
     s.settings = this;
@@ -83,6 +87,24 @@ class SettingsController extends ChangeNotifier {
   void setNearbyRadius(int r) {
     nearbyRadius = r;
     s.repo.setNearbyRadius(r);
+    notifyListeners();
+  }
+
+  void setAlarmSound(AlarmSoundType sound) {
+    alarmSound = sound;
+    s.repo.setAlarmSoundType(sound.id);
+    notifyListeners();
+  }
+
+  void setAlarmVolume(double volume) {
+    alarmVolume = volume.clamp(0.0, 1.0);
+    s.repo.setAlarmVolume(alarmVolume);
+    notifyListeners();
+  }
+
+  void setAlarmLeadMinutes(int minutes) {
+    alarmLeadMinutes = minutes.clamp(2, 30);
+    s.repo.setAlarmLeadMinutes(alarmLeadMinutes);
     notifyListeners();
   }
 }

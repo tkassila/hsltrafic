@@ -196,7 +196,7 @@ class AlarmManagementDialog extends StatelessWidget {
                                           ),
                                           const SizedBox(width: 4),
                                           Text(
-                                            'Hälytys ${_formatHm(alarm.alarmTime)}',
+                                            'Hälytys ${_formatHm(alarm.alarmTime)} (${alarm.leadMinutes} min)',
                                             style: TextStyle(
                                               fontSize: 11,
                                               fontWeight: FontWeight.w600,

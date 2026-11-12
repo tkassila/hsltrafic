@@ -4,8 +4,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/localization.dart';
 import '../../data/safety_contacts.dart';
+import '../../models/alarm_sound_type.dart';
 import '../../models/transit_region.dart';
 import '../../shared/region_selector.dart';
+import '../../state/alarm_controller.dart';
 import '../../state/app_state.dart';
 import '../../theme/hsl_colors.dart';
 
@@ -408,6 +410,108 @@ class _MoreViewState extends State<MoreView> {
                         onChanged: (m) {
                           if (m != null) settings.setTheme(m);
                         },
+                      ),
+                    ),
+                    const Divider(height: 1),
+
+                    // Alarm sound, volume & duration
+                    ListTile(
+                      leading: const Icon(Icons.alarm_on_rounded, color: Colors.redAccent),
+                      title: const Text('Hälytysääni & Voimakkuus'),
+                      subtitle: Text(
+                        '${settings.alarmSound.displayName} • ${(settings.alarmVolume * 100).toInt()} % • Kesto 2 min',
+                      ),
+                      trailing: DropdownButton<AlarmSoundType>(
+                        value: settings.alarmSound,
+                        underline: const SizedBox(),
+                        items: AlarmSoundType.values
+                            .map((s) => DropdownMenuItem(value: s, child: Text(s.displayName)))
+                            .toList(),
+                        onChanged: (s) {
+                          if (s != null) {
+                            settings.setAlarmSound(s);
+                            context.read<AlarmController>().previewSound(s, settings.alarmVolume);
+                          }
+                        },
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      child: Row(
+                        children: [
+                          Icon(
+                            settings.alarmVolume > 0.7 ? Icons.volume_up_rounded : Icons.volume_down_rounded,
+                            size: 20,
+                            color: Colors.redAccent,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${(settings.alarmVolume * 100).toInt()} %',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          Expanded(
+                            child: Slider(
+                              value: settings.alarmVolume,
+                              min: 0.3,
+                              max: 1.0,
+                              divisions: 7,
+                              activeColor: Colors.redAccent,
+                              onChanged: (val) {
+                                settings.setAlarmVolume(val);
+                              },
+                              onChangeEnd: (val) {
+                                context.read<AlarmController>().previewSound(settings.alarmSound, val);
+                              },
+                            ),
+                          ),
+                          Text(
+                            settings.alarmVolume >= 0.95 ? 'Täysi (100%)' : (settings.alarmVolume >= 0.7 ? 'Korkea' : 'Kohtalainen'),
+                            style: TextStyle(fontSize: 11, color: Theme.of(context).hintColor, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+
+                    // Alarm default lead time (2 - 30 min, default 7 min)
+                    ListTile(
+                      leading: const Icon(Icons.timer_outlined, color: HslColors.primaryBlue),
+                      title: const Text('Hälytyksen ennakkoaika (oletus)'),
+                      subtitle: Text(
+                        '${settings.alarmLeadMinutes} min ennen kävelyn alkua (valittavissa 2 – 30 min)',
+                      ),
+                      trailing: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: HslColors.primaryBlue.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '${settings.alarmLeadMinutes} min',
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: HslColors.primaryBlue),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      child: Row(
+                        children: [
+                          const Text('2 min', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                          Expanded(
+                            child: Slider(
+                              value: settings.alarmLeadMinutes.toDouble(),
+                              min: 2,
+                              max: 30,
+                              divisions: 28,
+                              label: '${settings.alarmLeadMinutes} min',
+                              activeColor: HslColors.primaryBlue,
+                              onChanged: (val) {
+                                settings.setAlarmLeadMinutes(val.round());
+                              },
+                            ),
+                          ),
+                          const Text('30 min', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                        ],
                       ),
                     ),
                   ],

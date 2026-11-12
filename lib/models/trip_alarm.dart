@@ -1,7 +1,7 @@
 import '../models/transit_mode.dart';
 
 /// Käyttäjän asettama reitti- tai pysäkkihälytys.
-/// Hälytys laukeaa 7 minuuttia ennen kävelyn alkamista.
+/// Hälytys laukeaa valitun ennakkoajan (oletus 7 min, min 2 min, max 30 min) ennen kävelyn alkamista.
 class TripAlarm {
   final String id;
   final String title;
@@ -13,6 +13,7 @@ class TripAlarm {
   final DateTime walkStartTime;
   final DateTime alarmTime;
   final String source; // 'planner' tai 'nearby'
+  final int leadMinutes;
   bool isTriggered;
 
   TripAlarm({
@@ -26,6 +27,7 @@ class TripAlarm {
     required this.walkStartTime,
     required this.alarmTime,
     required this.source,
+    this.leadMinutes = 7,
     this.isTriggered = false,
   });
 
@@ -42,6 +44,7 @@ class TripAlarm {
         'walkStartTime': walkStartTime.toIso8601String(),
         'alarmTime': alarmTime.toIso8601String(),
         'source': source,
+        'leadMinutes': leadMinutes,
         'isTriggered': isTriggered,
       };
 
@@ -57,6 +60,12 @@ class TripAlarm {
       }
     } catch (_) {}
 
+    final walkStartTime = DateTime.parse(json['walkStartTime'] as String).toLocal();
+    final alarmTime = DateTime.parse(json['alarmTime'] as String).toLocal();
+    final rawLead = json['leadMinutes'] as int?;
+    final int lead = rawLead ??
+        walkStartTime.difference(alarmTime).inMinutes.clamp(2, 30);
+
     return TripAlarm(
       id: json['id'] as String,
       title: json['title'] as String? ?? '',
@@ -65,9 +74,10 @@ class TripAlarm {
       destination: json['destination'] as String? ?? '',
       stopName: json['stopName'] as String?,
       departureTime: DateTime.parse(json['departureTime'] as String).toLocal(),
-      walkStartTime: DateTime.parse(json['walkStartTime'] as String).toLocal(),
-      alarmTime: DateTime.parse(json['alarmTime'] as String).toLocal(),
+      walkStartTime: walkStartTime,
+      alarmTime: alarmTime,
       source: json['source'] as String? ?? 'unknown',
+      leadMinutes: lead.clamp(2, 30),
       isTriggered: json['isTriggered'] as bool? ?? false,
     );
   }

@@ -8,7 +8,6 @@ import '../../core/localization.dart';
 import '../../models/journey.dart';
 import '../../models/place_stop.dart';
 import '../../models/transit_mode.dart';
-import '../../models/trip_alarm.dart';
 import '../../shared/base_map.dart';
 import '../../shared/mode_style.dart';
 import '../../shared/place_search.dart';
@@ -20,6 +19,7 @@ import '../../state/app_state.dart';
 import '../../state/planner_controller.dart';
 import '../../theme/hsl_colors.dart';
 import '../alarms/alarm_management_dialog.dart';
+import '../alarms/set_trip_alarm_dialog.dart';
 
 class PlannerView extends StatefulWidget {
   const PlannerView({super.key});
@@ -66,9 +66,7 @@ class _PlannerViewState extends State<PlannerView> {
 
   Future<void> _setAlarmForItinerary(Itinerary itin) async {
     HapticFeedback.heavyImpact();
-    final alarmCtrl = context.read<AlarmController>();
     final walkStartTime = itin.start;
-    final alarmTime = walkStartTime.subtract(const Duration(minutes: 7));
 
     // Ensimmäinen joukkoliikenneosuus tai ensimmäinen osuus
     final firstTransit = itin.legs.where((l) => l.isTransit).firstOrNull;
@@ -79,8 +77,8 @@ class _PlannerViewState extends State<PlannerView> {
         : (itin.legs.isNotEmpty ? itin.legs.last.toName : '');
     final stop = firstTransit?.fromName ?? (itin.legs.isNotEmpty ? itin.legs.first.fromName : '');
 
-    final alarm = TripAlarm(
-      id: 'plan_${DateTime.now().millisecondsSinceEpoch}_${itin.start.millisecondsSinceEpoch}',
+    await SetTripAlarmDialog.show(
+      context,
       title: line != null ? '${mode.label} $line' : 'Reitti $dest',
       line: line,
       mode: mode,
@@ -88,39 +86,7 @@ class _PlannerViewState extends State<PlannerView> {
       stopName: stop.isNotEmpty ? stop : null,
       departureTime: firstTransit?.start ?? itin.start,
       walkStartTime: walkStartTime,
-      alarmTime: alarmTime,
       source: 'planner',
-    );
-
-    final totalActive = await alarmCtrl.addAlarm(alarm);
-    if (!mounted) return;
-
-    final hmStr = hm(alarmTime);
-    final routeDesc = line != null ? '$line ($dest)' : dest;
-
-    final String message;
-    if (totalActive > 1) {
-      message = 'Hälytys asetettu klo $hmStr ($routeDesc, 7 min ennen kävelyä).\nHuomio: Sinulla on nyt $totalActive aktiivista hälytystä!';
-    } else {
-      message = 'Hälytys asetettu klo $hmStr ($routeDesc, 7 min ennen kävelyä).';
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: HslColors.primaryBlue,
-        duration: const Duration(seconds: 4),
-        action: SnackBarAction(
-          label: 'Hälytykset',
-          textColor: Colors.white,
-          onPressed: () {
-            showDialog(
-              context: context,
-              builder: (_) => const AlarmManagementDialog(),
-            );
-          },
-        ),
-      ),
     );
   }
 
@@ -901,7 +867,7 @@ class _PlannerViewState extends State<PlannerView> {
                                             for (final (i, leg) in itin.legs.indexed) ...[
                                               if (i == 0)
                                                 Tooltip(
-                                                  message: 'Paina pitkään: aseta huomiohälytys (kävely - 7 min)',
+                                                  message: 'Paina pitkään: aseta huomiohälytys',
                                                   child: Material(
                                                     color: Colors.transparent,
                                                     child: InkWell(
